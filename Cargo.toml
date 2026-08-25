@@ -1,0 +1,42 @@
+[package]
+name = "henrys_shadowing_app"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+eframe = "0.32"
+crossbeam-channel = "0.5"
+rfd = "0.15"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# shipping / managed downloads (download.rs)
+sha2 = "0.10"
+ureq = { version = "2.9", features = ["native-certs"] }
+zip = { version = "0.6", default-features = false, features = ["deflate"] }
+sevenz-rust = "0.6"
+
+# To fish the HWND out of eframe for the DWM window-chrome calls (rounded
+# corners / border / shadow on the frameless window). Already in eframe's
+# dependency tree; naming it just makes its traits importable.
+[target.'cfg(windows)'.dependencies]
+raw-window-handle = "0.6"
+
+# Bakes the icon into the .exe itself (see build.rs) — that's what Explorer,
+# the taskbar and installer shortcuts read. The window icon is set separately
+# at runtime in main.rs.
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
+
+# Optimize dependencies even in debug builds, while leaving our own code
+# unoptimized so it still compiles fast and debugs cleanly.
+#
+# This matters a lot here: `cargo run` otherwise builds sevenz-rust, lzma and
+# sha2 at opt-level 0, which makes unpacking the 1.4 GB / 4.5 GB-expanded
+# transcription engine take the better part of an hour instead of a couple of
+# minutes. It looks like a hang, and it isn't one.
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+strip = true
