@@ -4,7 +4,31 @@
 //! here — ffmpeg/deno/yt-dlp are shipped in the installer's `bin\` dir and
 //! resolved at spawn time rather than surfaced to the user.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use crate::pipeline::no_window_command;
+
+/// Set once a whisperx run has actually failed. See [`mark_whisperx_unusable`].
+static WHISPERX_UNUSABLE: AtomicBool = AtomicBool::new(false);
+
+/// Record that whisperx launched but could not transcribe.
+///
+/// The probe below can only ask cheap questions — "is it there", "does
+/// `--version` answer" — and a whisperx whose CUDA libraries are missing
+/// passes both, then dies part-way into the first real run. Left at that, the
+/// app would go on believing it has an engine: it would never offer the
+/// standalone download, and every job would fail the same way.
+///
+/// Deliberately not persisted. If the user repairs their install, restarting
+/// the app is enough to get whisperx reconsidered.
+pub fn mark_whisperx_unusable() {
+    WHISPERX_UNUSABLE.store(true, Ordering::Relaxed);
+}
+
+/// Whether a whisperx run has failed this session.
+pub fn whisperx_unusable() -> bool {
+    WHISPERX_UNUSABLE.load(Ordering::Relaxed)
+}
 
 #[derive(Clone, Copy, Debug)]
 pub enum DependencyStatus {
@@ -52,6 +76,13 @@ pub fn check_demucs() -> DependencyStatus {
 pub fn check_transcription() -> DependencyStatus {
     if crate::download::installed_exe(crate::download::ToolId::FasterWhisper).is_some() {
         return DependencyStatus::Found;
+    }
+
+    // A whisperx that has already failed a real run doesn't count as an engine,
+    // whatever `--version` says — reporting it as present is what would hide
+    // the download that fixes the problem.
+    if whisperx_unusable() {
+        return DependencyStatus::NotFound;
     }
 
     check_python_module("whisperx", "whisperx")

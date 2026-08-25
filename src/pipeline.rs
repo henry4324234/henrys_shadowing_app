@@ -889,26 +889,12 @@ fn separate_vocals(input: &Path, work_dir: &Path) -> Result<PathBuf, BoxErr> {
             .map(|c| c.to_string())
             .unwrap_or_else(|| "signal".to_string());
 
-        // Take the tail of stderr — Python tracebacks and "real" errors
-        // appear at the end, after any progress/log output. Skip blank
-        // lines and tqdm leftovers that contain percent signs.
-        let tail_lines = |s: &str| -> String {
-            s.lines()
-                .filter(|l| !l.trim().is_empty())
-                .filter(|l| !l.contains("MB/s") && !l.contains("kB/s"))
-                .rev()
-                .take(5)
-                .collect::<Vec<_>>()
-                .into_iter()
-                .rev()
-                .collect::<Vec<_>>()
-                .join("\n")
-        };
-
+        // demucs is Python too, so its failures end in a traceback: lead
+        // with the exception rather than the carets underneath it.
         let detail_source = if !stderr.trim().is_empty() {
-            tail_lines(&stderr)
+            tool_error_detail(&stderr, 4)
         } else if !stdout.trim().is_empty() {
-            tail_lines(&stdout)
+            tool_error_detail(&stdout, 4)
         } else {
             String::new()
         };
@@ -1056,7 +1042,12 @@ fn transcribe_to_segments(
     if let Some(engine) = crate::download::installed_exe(crate::download::ToolId::FasterWhisper) {
         return transcribe_with_standalone(&engine, input, model, task, cancel, on_progress);
     }
-    if find_module_invocation("whisperx", "whisperx").is_some() {
+    // Skip a whisperx that has already failed once this session. Falling
+    // through to the "no engine available" message below points at the
+    // download that fixes it, instead of failing the same way twice.
+    if !crate::deps::whisperx_unusable()
+        && find_module_invocation("whisperx", "whisperx").is_some()
+    {
         return transcribe_with_whisperx(input, model, task, cancel, on_progress);
     }
     Err(
@@ -1476,8 +1467,19 @@ fn transcribe_with_whisperx(
         .map_err(|e| -> BoxErr { format!("failed to launch whisperx: {e}").into() })?;
 
     if !output.status.success() {
+        // A whisperx that launches but cannot transcribe is worse than one
+        // that is missing: the start-up probe is a `--version` call, so it
+        // passes, the app believes it has an engine, and it never offers the
+        // standalone download that would fix things. Record the failure so
+        // the next probe knows better.
+        crate::deps::mark_whisperx_unusable();
+
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("whisperx failed: {}", tail_lines(&stderr, 5)).into());
+        let detail = tool_error_detail(&stderr, 4);
+        if detail.is_empty() {
+            return Err(format!("whisperx failed ({})", output.status).into());
+        }
+        return Err(format!("whisperx failed: {detail}").into());
     }
 
     // WhisperX writes <input_stem>.json into the output dir.
@@ -1503,13 +1505,124 @@ fn transcribe_with_whisperx(
     Ok(segments)
 }
 
-/// Last `n` non-empty lines of a tool's stderr, oldest-first, for error
-/// messages. Shared by both transcription backends.
-fn tail_lines(text: &str, n: usize) -> String {
-    let mut lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
-    let start = lines.len().saturating_sub(n);
-    lines.drain(..start);
-    lines.join("\n")
+/// The part of a failed tool's output worth putting in front of the user.
+///
+/// A plain tail of stderr is the obvious thing and the wrong thing for the
+/// Python tools. Their tracebacks do end with the exception and its message,
+/// but the lines immediately above it are the echoed source line and a row of
+/// `^^^^` carets - so a tail leads with carets and buries the one sentence
+/// that says what broke ("Library cublas64_12.dll is not found", say). Lead
+/// with the exception instead, keeping `context` lines after it: the job row
+/// shows the first line, and the whole string on hover.
+///
+/// Falls back to the last `context` lines when nothing looks like an
+/// exception, which is the right answer for ffmpeg and yt-dlp.
+fn tool_error_detail(text: &str, context: usize) -> String {
+    let lines: Vec<&str> = text
+        .lines()
+        .map(str::trim_end)
+        .filter(|l| !l.trim().is_empty())
+        // Progress leftovers and caret markers say nothing about the failure.
+        .filter(|l| !l.contains("MB/s") && !l.contains("kB/s"))
+        .filter(|l| !l.trim().chars().all(|c| c == '^'))
+        .collect();
+
+    if lines.is_empty() {
+        return String::new();
+    }
+
+    match lines.iter().rposition(|l| is_exception_line(l)) {
+        Some(i) => {
+            let mut out = Vec::with_capacity(context + 1);
+            out.push(lines[i]);
+            out.extend_from_slice(&lines[i.saturating_sub(context)..i]);
+            out.join("\n")
+        }
+        None => lines[lines.len().saturating_sub(context.max(1))..].join("\n"),
+    }
+}
+
+/// Does this line look like the last line of a Python traceback - an
+/// exception type, a colon, then a message?
+///
+/// Deliberately narrow. A Windows path ("C:\\Users\\...") and an ordinary log line
+/// ("warning: ...") both contain a colon, and neither is the failure.
+fn is_exception_line(line: &str) -> bool {
+    let Some((head, message)) = line.split_once(':') else {
+        return false;
+    };
+    if message.trim().is_empty() {
+        return false;
+    }
+    let head = head.trim();
+    if head.contains(char::is_whitespace) {
+        return false;
+    }
+    // Custom exceptions arrive fully qualified: `whisperx.asr.ModelError`.
+    let name = head.rsplit('.').next().unwrap_or(head);
+    name.starts_with(|c: char| c.is_ascii_uppercase())
+        && (name.ends_with("Error")
+            || name.ends_with("Exception")
+            || name.ends_with("Interrupt"))
+}
+
+#[cfg(test)]
+mod tool_error_tests {
+    use super::{is_exception_line, tool_error_detail};
+
+    /// The case that prompted all this: the real message is the last line, and
+    /// a naive tail would have surfaced the carets above it instead.
+    #[test]
+    fn leads_with_the_exception_not_the_carets() {
+        let stderr = "\
+Using cache found in C:\\Users\\Henry/.cache\\torch\\hub
+Traceback (most recent call last):
+  File \"whisperx\\asr.py\", line 104, in encode
+    return self.model.encode(features, to_cpu=to_cpu)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: Library cublas64_12.dll is not found or cannot be loaded";
+
+        let detail = tool_error_detail(stderr, 4);
+        assert_eq!(
+            detail.lines().next().unwrap(),
+            "RuntimeError: Library cublas64_12.dll is not found or cannot be loaded"
+        );
+        // Context is kept for the hover text, minus the caret line.
+        assert!(detail.contains("line 104, in encode"));
+        assert!(!detail.contains("^^^"));
+    }
+
+    #[test]
+    fn falls_back_to_the_tail_for_non_python_tools() {
+        let stderr = "\
+[libx264 @ 000001] using cpu capabilities
+Conversion failed!
+Output file is empty, nothing was encoded";
+
+        let detail = tool_error_detail(stderr, 2);
+        assert_eq!(
+            detail,
+            "Conversion failed!\nOutput file is empty, nothing was encoded"
+        );
+    }
+
+    #[test]
+    fn empty_output_gives_an_empty_detail() {
+        assert_eq!(tool_error_detail("", 4), "");
+        assert_eq!(tool_error_detail("   \n\n  \n", 4), "");
+    }
+
+    #[test]
+    fn only_real_exception_lines_count() {
+        assert!(is_exception_line("RuntimeError: boom"));
+        assert!(is_exception_line("ValueError: bad value"));
+        assert!(is_exception_line("whisperx.asr.ModelError: no model"));
+        // A drive letter, a log level, and a bare type with no message.
+        assert!(!is_exception_line("C:\\Users\\Henry\\clip.wav"));
+        assert!(!is_exception_line("warning: something happened"));
+        assert!(!is_exception_line("RuntimeError:"));
+        assert!(!is_exception_line("Traceback (most recent call last):"));
+    }
 }
 
 /// Parse an SRT subtitle file into `Segment`s. SRT blocks are separated by

@@ -1203,6 +1203,19 @@ impl eframe::App for App {
                     }
                     if failed {
                         self.maybe_beep(false);
+
+                        // A run can disprove what the start-up probe believed:
+                        // a whisperx that answers `--version` but dies loading
+                        // its CUDA libraries counts as an engine until it has
+                        // actually been tried. Re-probe on a failure, and if
+                        // nothing usable is left, put the download in front of
+                        // the user rather than leaving them to guess — without
+                        // this, the cached `whisper_ok` means the window they
+                        // need can never open again this session.
+                        if !whisper_installed() {
+                            self.whisper_ok = false;
+                            self.whisper_window_open = true;
+                        }
                     }
                 }
                 JobMsg::Cancelled(id, generation) => {
