@@ -78,8 +78,15 @@ try {
         if ($answer -ne 'y') { throw 'aborted' }
     }
 
-    & gh release view $tag --json tagName *> $null
-    if ($LASTEXITCODE -eq 0) {
+    # Ask for the list rather than viewing the one tag: `gh release view` on a
+    # tag that does not exist writes to stderr, and Windows PowerShell turns a
+    # redirected native stderr line into a terminating error - which would look
+    # like a failure when it is in fact the ordinary case.
+    if (& git tag --list $tag) {
+        throw "tag $tag already exists locally. Bump the version in Cargo.toml, or remove it with: git tag -d $tag"
+    }
+    $published = & gh release list --limit 100 --json tagName --jq '.[].tagName'
+    if ($published -contains $tag) {
         throw "release $tag already exists. Bump the version in Cargo.toml, or delete it with: gh release delete $tag"
     }
 } finally {
