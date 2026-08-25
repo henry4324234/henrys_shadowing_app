@@ -1,0 +1,86 @@
+name: macOS build
+
+# The project is developed on Windows, so this is the only machine that can
+# build the Mac app. Run it by hand from the Actions tab, or let a version tag
+# trigger it; the .dmg comes back as an artifact to test before anything is
+# published.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: Build the app bundle
+    runs-on: macos-14      # Apple Silicon, which is what the bundle targets
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          rustc --version
+          uname -m
+
+      - name: Test
+        run: cargo test --release
+
+      - name: Build the .app and .dmg
+        run: ./packaging/macos/build_app.sh
+
+      - name: Check the bundled ffmpeg has what the pipeline asks for
+        run: |
+          FF="packaging/dist/mac/Henry's Shadowing App.app/Contents/Resources/bin/ffmpeg"
+          "$FF" -hide_banner -version | head -1
+          for enc in libx264 aac; do
+            if "$FF" -hide_banner -encoders | grep -q " $enc "; then
+              echo "ok: $enc"
+            else
+              echo "MISSING encoder: $enc" && exit 1
+            fi
+          done
+          "packaging/dist/mac/Henry's Shadowing App.app/Contents/Resources/bin/yt-dlp" --version
+          "packaging/dist/mac/Henry's Shadowing App.app/Contents/Resources/bin/deno" --version
+
+      - name: Check the bundle launches far enough to open a window
+        run: |
+          # No display on a runner, so this only proves the binary loads, links
+          # and does not die on start-up - not that the UI is right.
+          APP="packaging/dist/mac/Henry's Shadowing App.app/Contents/MacOS/henrys_shadowing_app"
+          "$APP" &
+          PID=$!
+          sleep 10
+          if kill -0 "$PID" 2>/dev/null; then
+            echo "still running after 10s"
+            kill "$PID"
+          else
+            wait "$PID" || echo "exited with $? - expected on a headless runner"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: |
+            packaging/dist/*.dmg
+            packaging/dist/*.dmg.sha256
+          if-no-files-found: error
+
+  engine-cli:
+    name: What the macOS engine accepts
+    # Purfview ships only an x86-64 Mac build, so run it on the Intel runner
+    # where it needs no Rosetta. This is here to answer one question - which
+    # flags the older engine understands - and can go once that is settled.
+    runs-on: macos-13
+    steps:
+      - name: Fetch and interrogate the engine
+        run: |
+          curl -fsSL -o engine.zip \
+            https://github.com/Purfview/whisper-standalone-win/releases/download/faster-whisper/Whisper-Faster_r186.1_macOS-x86-64.zip
+          echo "863e9d41cd889bfd5417bec5d8d48f04d0a0e6c97b6f45c7910a85e08798a3bc  engine.zip" | shasum -a 256 -c -
+          unzip -q engine.zip
+          chmod +x Whisper-Faster/whisper-faster
+          ./Whisper-Faster/whisper-faster --help 2>&1 | tee help.txt | head -80
+          echo "--- flags the pipeline wants ---"
+          for flag in --sentence --beep_off --word_timestamps --output_format --task --device; do
+            if grep -q -- "$flag" help.txt; then echo "supported:   $flag"; else echo "MISSING:     $flag"; fi
+          done

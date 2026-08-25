@@ -1061,6 +1061,45 @@ fn transcribe_to_segments(
 /// Faster-Whisper-XXL backend. Emits SRT (not JSON) on purpose: the engine's
 /// `--sentence` sentence-splitting applies to every output format *except*
 /// JSON, and sentence-level segments are exactly what this app is built on.
+/// Whether the standalone engine at `engine` understands `flag`, by reading its
+/// own `--help`. Probed once per process and cached: `--help` costs a subprocess
+/// spawn, and the answer cannot change while the app is running.
+///
+/// This exists because two different engines answer to the same call site.
+/// Windows gets Faster-Whisper-XXL, macOS gets the older plain Whisper-Faster
+/// (the only Mac build Purfview ships), and the XXL-only flags are fatal to the
+/// latter rather than ignored.
+fn engine_accepts(engine: &Path, flag: &str) -> bool {
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+
+    static HELP: Mutex<Option<HashMap<PathBuf, String>>> = Mutex::new(None);
+
+    let mut guard = match HELP.lock() {
+        Ok(g) => g,
+        // A poisoned lock means a previous probe panicked; assume nothing.
+        Err(_) => return false,
+    };
+    let cache = guard.get_or_insert_with(HashMap::new);
+    let help = cache.entry(engine.to_path_buf()).or_insert_with(|| {
+        no_window_command(engine)
+            .arg("--help")
+            .output()
+            .map(|o| {
+                let mut text = String::from_utf8_lossy(&o.stdout).into_owned();
+                text.push_str(&String::from_utf8_lossy(&o.stderr));
+                text
+            })
+            .unwrap_or_default()
+    });
+
+    // An engine that printed no help at all is a probe failure, not a refusal.
+    // Treat it as supporting the flag: that is what every build did before this
+    // check existed, and losing `--sentence` silently would quietly coarsen
+    // every transcription on Windows.
+    help.is_empty() || help.contains(flag)
+}
+
 fn transcribe_with_standalone(
     engine: &Path,
     input: &Path,
@@ -1100,9 +1139,18 @@ fn transcribe_with_standalone(
         args.push(s.to_string());
     }
     args.push(work_dir.to_string_lossy().into_owned());
-    // Sentence-level cues (VAD stays at the engine's silero default).
-    args.push("--sentence".to_string());
-    args.push("--beep_off".to_string());
+    // Sentence-level cues (VAD stays at the engine's silero default), and no
+    // finish-beep. Both are Faster-Whisper-XXL extras: the plain Whisper-Faster
+    // build - which is all Purfview publishes for macOS - rejects an unknown
+    // flag outright and transcribes nothing, so ask it what it takes first.
+    // Without `--sentence` the SRT carries the engine's own segmentation, which
+    // the chunker then splits on pauses as usual; the result is coarser, not
+    // broken.
+    for flag in ["--sentence", "--beep_off"] {
+        if engine_accepts(engine, flag) {
+            args.push(flag.to_string());
+        }
+    }
 
     // Total duration up front (a cheap ffmpeg header read), so the engine's
     // per-segment "[.. --> MM:SS.mmm]" output can be turned into a real fraction

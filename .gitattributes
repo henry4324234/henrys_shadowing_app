@@ -1,0 +1,7 @@
+# Shell scripts run on macOS runners: CRLF would make them fail with a
+# "bad interpreter" error that reads as a missing shell.
+*.sh text eol=lf
+
+# These only ever run on Windows.
+*.ps1 text eol=crlf
+*.iss text eol=crlf

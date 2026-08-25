@@ -91,6 +91,12 @@ pub struct ToolSpec {
 /// `certutil -hashfile <file> SHA256`. ffmpeg/deno/yt-dlp publish checksum
 /// assets alongside each release; verify against those, not just a local
 /// hash of whatever was downloaded.
+/// Windows assets. Also used on Linux and the BSDs, which aren't a shipping
+/// target - there's no installer for them and the tools come from the distro -
+/// but keeping a full list there means [`spec`] stays total, and nothing
+/// downloads it: the UI only ever offers the engine, and a Linux user is served
+/// by the PATH/pipx detection instead.
+#[cfg(any(target_os = "windows", not(target_os = "macos")))]
 pub const MANIFEST: &[ToolSpec] = &[
     // Gyan's release builds rather than BtbN's autobuilds: BtbN deletes old
     // autobuild tags after a few weeks, which 404s the pinned URL (and with
@@ -145,6 +151,60 @@ pub const MANIFEST: &[ToolSpec] = &[
     },
 ];
 
+/// macOS assets, Apple Silicon. The helper tools are arm64 builds, so this is
+/// not a universal app: an Intel Mac would download binaries it cannot run.
+///
+/// The engine is the awkward one. Purfview publishes no Apple Silicon build and
+/// no XXL build for macOS at all - the newest Mac asset is Whisper-Faster
+/// r186.1, x86-64, from 2024. It runs under Rosetta 2 and only on the CPU (no
+/// CUDA on a Mac), which is slower than the Windows path but keeps the
+/// one-click install; a system whisperx is still preferred when present, and is
+/// the faster option on Apple Silicon because it can reach the GPU through MPS.
+#[cfg(target_os = "macos")]
+pub const MANIFEST: &[ToolSpec] = &[
+    ToolSpec {
+        id: ToolId::Ffmpeg,
+        display_name: "FFmpeg",
+        version: "6.0-static-arm64",
+        url: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/ffmpeg-darwin-arm64",
+        sha256: Some("a90e3db6a3fd35f6074b013f948b1aa45b31c6375489d39e572bea3f18336584"),
+        kind: PayloadKind::RawExe,
+        exe_name: "ffmpeg",
+        approx_size: 45_568_216,
+    },
+    ToolSpec {
+        id: ToolId::Deno,
+        display_name: "Deno",
+        version: "2.9.2",
+        url: "https://github.com/denoland/deno/releases/download/v2.9.2/deno-aarch64-apple-darwin.zip",
+        sha256: Some("687ae485168ba73a4f1ee3a954eb4f077eca82f2fefd236a6a83a3889287876c"),
+        kind: PayloadKind::Zip,
+        exe_name: "deno",
+        approx_size: 37_981_362,
+    },
+    ToolSpec {
+        id: ToolId::YtDlp,
+        display_name: "yt-dlp",
+        // The macOS asset is a universal binary, so this one is fine on Intel.
+        version: "2026.08.19",
+        url: "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp_macos",
+        sha256: Some("0f192b7ec147ab6288885d6351d9ab67367640029b4377576ef46dd79cf7b202"),
+        kind: PayloadKind::RawExe,
+        exe_name: "yt-dlp",
+        approx_size: 37_146_048,
+    },
+    ToolSpec {
+        id: ToolId::FasterWhisper,
+        display_name: "Faster-Whisper (transcription engine)",
+        version: "r186.1-macos-x86-64",
+        url: "https://github.com/Purfview/whisper-standalone-win/releases/download/faster-whisper/Whisper-Faster_r186.1_macOS-x86-64.zip",
+        sha256: Some("863e9d41cd889bfd5417bec5d8d48f04d0a0e6c97b6f45c7910a85e08798a3bc"),
+        kind: PayloadKind::Zip,
+        exe_name: "whisper-faster",
+        approx_size: 82_515_821,
+    },
+];
+
 pub fn spec(id: ToolId) -> &'static ToolSpec {
     MANIFEST
         .iter()
@@ -188,11 +248,24 @@ pub fn managed_root() -> Option<PathBuf> {
     }
 }
 
-/// `bin\` directory next to the running executable — where the installer
-/// puts ffmpeg/deno/yt-dlp.
+/// Where the installer puts the ffmpeg/deno/yt-dlp it ships with.
+///
+/// Next to the executable on Windows. On macOS the executable lives inside the
+/// bundle at `Contents/MacOS/`, and anything that isn't code belongs one floor
+/// up in `Contents/Resources/` - putting the tools beside the binary would
+/// work, but it breaks the convention codesign and notarisation expect.
 pub fn bundled_bin_dir() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
-    Some(exe.parent()?.join("bin"))
+    let dir = exe.parent()?;
+
+    #[cfg(target_os = "macos")]
+    {
+        if dir.ends_with("Contents/MacOS") {
+            return Some(dir.parent()?.join("Resources").join("bin"));
+        }
+    }
+
+    Some(dir.join("bin"))
 }
 
 fn tool_dir(spec: &ToolSpec) -> Option<PathBuf> {
@@ -441,6 +514,24 @@ fn install(
             spec.display_name, spec.exe_name
         )
     })?;
+
+    // A raw download has no permission bits to inherit, and a zip's are lost
+    // unless the archive carried them — either way the file comes out
+    // non-executable, and spawning it fails with a bare "permission denied"
+    // that looks like a broken install. Windows has no such notion.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Err(e) = fs::set_permissions(&exe_in_staging, fs::Permissions::from_mode(0o755)) {
+            let _ = fs::remove_dir_all(&staging);
+            return Err(format!(
+                "{}: cannot make {} executable: {e}",
+                spec.display_name, spec.exe_name
+            )
+            .into());
+        }
+    }
+
     drop(exe_in_staging); // path becomes stale after the rename below
 
     // Marker goes in before the rename: after the rename the directory is

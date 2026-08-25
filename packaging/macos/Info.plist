@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Bundle metadata for the .app. @VERSION@ is substituted by build_app.sh.
+
+  CFBundleIdentifier is what macOS uses to tell one app from another for
+  preferences, permissions and Launch Services - it has to stay stable across
+  versions, the same way the AppId GUID does in the Windows installer.
+-->
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>Henry's Shadowing App</string>
+	<key>CFBundleDisplayName</key>
+	<string>Henry's Shadowing App</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.henry4324234.shadowing-app</string>
+	<key>CFBundleExecutable</key>
+	<string>henrys_shadowing_app</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>@VERSION@</string>
+	<key>CFBundleVersion</key>
+	<string>@VERSION@</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Henry</string>
+	<!-- Apple Silicon only: the bundled ffmpeg and deno are arm64 builds. -->
+	<key>LSMinimumSystemVersion</key>
+	<string>11.0</string>
+	<key>LSArchitecturePriority</key>
+	<array>
+		<string>arm64</string>
+	</array>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<!-- The app writes nothing to the user's Documents or Desktop by default,
+	     but it does save output wherever the user points it, and the file
+	     dialog needs to be able to show those places. -->
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>To read audio files you choose and save finished clips where you ask.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>To read audio files you choose and save finished clips where you ask.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>To save finished clips to your Downloads folder.</string>
+</dict>
+</plist>
