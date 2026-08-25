@@ -443,7 +443,13 @@
     return line;
   }
 
-  fetch('https://api.github.com/repos/' + REPO + '/releases?per_page=30')
+  // no-cache revalidates instead of serving blind from the browser's copy.
+  // The API says max-age=60, so a page opened just after a release would
+  // otherwise show the state before it - and the button for a platform that
+  // release added would quietly stay on its fallback. Revalidating costs
+  // nothing: GitHub answers 304 from the ETag, which is not counted against
+  // the rate limit.
+  fetch('https://api.github.com/repos/' + REPO + '/releases?per_page=30', { cache: 'no-cache' })
     .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
     .then(function (releases) {
       // Newest first, and never a prerelease — those are for testing, not for
