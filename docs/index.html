@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Henry's Shadowing App — Download for Windows</title>
-<meta name="description" content="Turn any video or audio file into shadowing practice: every sentence transcribed, cut out and repeated with a pause to speak in. Free download for Windows.">
+<title>Henry's Shadowing App — Download for Windows and Mac</title>
+<meta name="description" content="Turn any video or audio file into shadowing practice: every sentence transcribed, cut out and repeated with a pause to speak in. Free download for Windows and Mac.">
 <link rel="icon" href="favicon.png" type="image/png">
 <meta property="og:title" content="Henry's Shadowing App">
 <meta property="og:description" content="Turn any video or audio file into shadowing practice — every sentence transcribed, cut out and repeated with a pause to speak in.">
@@ -75,6 +75,9 @@
     text-decoration: none;
     padding: 15px 30px;
     border-radius: 999px;
+    /* Transparent, so the accent and secondary buttons come out exactly the
+       same height — the secondary one draws a real border here. */
+    border: 1px solid transparent;
     box-shadow: 0 10px 28px rgba(43,127,255,.35);
     transition: background .15s ease, transform .15s ease, box-shadow .15s ease;
   }
@@ -82,9 +85,41 @@
   .download:active { transform: translateY(0); }
   .download svg { width: 20px; height: 20px; flex: none; }
 
-  .release-meta { margin-top: 14px; font-size: .9rem; color: var(--text-muted); }
+  /* The second platform. Quieter than the accent button, so the one the
+     visitor is most likely to want still reads as the main action — the
+     script decides which of the two that is. */
+  .download.secondary {
+    background: var(--bg-raised);
+    color: var(--text);
+    border: 1px solid var(--border);
+    box-shadow: none;
+  }
+  .download.secondary:hover {
+    background: var(--bg-sunken);
+    border-color: var(--accent);
+    box-shadow: none;
+  }
+
+  /* Two download columns, each with its own caption underneath, falling into
+     one column on a narrow screen. */
+  .downloads {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 18px 26px;
+  }
+  .downloads > div { display: flex; flex-direction: column; align-items: center; }
+
+  .release-meta { margin: 14px 0 0; font-size: .9rem; color: var(--text-muted); max-width: 34ch; text-align: center; }
   .release-meta a { color: var(--text-muted); }
-  .release-meta .sep { opacity: .5; padding: 0 6px; }
+  /* Padded lightly rather than heavily, because the script now puts real
+     spaces either side — those spaces are the only places the line is allowed
+     to break. */
+  .release-meta .sep { opacity: .5; padding: 0 2px; }
+  /* Wrap between the parts, never inside one — otherwise "64-bit" splits at
+     its hyphen and reads as a line break in the middle of a word. */
+  .release-meta .part { white-space: nowrap; }
 
   /* ------------------------------------------------------------- sections */
 
@@ -188,15 +223,29 @@
     <h1>Henry's Shadowing App</h1>
     <p class="tagline">Turn any video or audio into shadowing practice — every sentence cut out, repeated, and waiting for you to speak.</p>
 
-    <a class="download" id="download"
-       href="https://github.com/henry4324234/henrys_shadowing_app/releases/latest">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M12 3v12"></path><path d="m7 11 5 5 5-5"></path><path d="M4 20h16"></path>
-      </svg>
-      Download for Windows
-    </a>
+    <div class="downloads" id="downloads">
+      <div id="dl-win">
+        <a class="download" id="download"
+           href="https://github.com/henry4324234/henrys_shadowing_app/releases/latest">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3v12"></path><path d="m7 11 5 5 5-5"></path><path d="M4 20h16"></path>
+          </svg>
+          Download for Windows
+        </a>
+        <p class="release-meta" id="release-meta">Windows 10 or 11 &middot; 64-bit</p>
+      </div>
 
-    <p class="release-meta" id="release-meta">Windows 10 or 11 &middot; 64-bit</p>
+      <div id="dl-mac">
+        <a class="download secondary" id="download-mac"
+           href="https://github.com/henry4324234/henrys_shadowing_app/releases">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3v12"></path><path d="m7 11 5 5 5-5"></path><path d="M4 20h16"></path>
+          </svg>
+          Download for Mac
+        </a>
+        <p class="release-meta" id="release-meta-mac">macOS &middot; Apple Silicon</p>
+      </div>
+    </div>
   </header>
 
   <section>
@@ -251,6 +300,10 @@
     <div class="note">
       <p><strong>An NVIDIA graphics card makes this much faster.</strong> Transcribing and rendering both use the GPU when there is one. It works without, it just takes considerably longer.</p>
     </div>
+
+    <div class="note">
+      <p><strong>On a Mac, open it the first time with right-click &rsaquo; Open.</strong> Drag the app out of the disk image into Applications, then right-click it and choose <em>Open</em>. The app is signed, but not notarised by Apple, so a plain double-click on a freshly downloaded copy is refused outright; going through <em>Open</em> once gives you a button to allow it, and after that it launches normally. The Mac build is for Apple Silicon, and transcribes on the CPU.</p>
+    </div>
   </section>
 
   <section>
@@ -258,11 +311,11 @@
     <dl class="facts">
       <div>
         <dt>Runs on</dt>
-        <dd>Windows 10 or 11, 64-bit</dd>
+        <dd>Windows 10 or 11, 64-bit &mdash; or macOS on Apple Silicon</dd>
       </div>
       <div>
         <dt>Installs to</dt>
-        <dd><code>%LOCALAPPDATA%\Programs\Henrys Shadowing App</code> — per user, no admin rights</dd>
+        <dd><code>%LOCALAPPDATA%\Programs\Henrys Shadowing App</code> — per user, no admin rights. On a Mac, wherever you drag the app; <code>/Applications</code> is the usual place.</dd>
       </div>
       <div>
         <dt>Comes with</dt>
@@ -298,55 +351,129 @@
 </div>
 
 <script>
-// Point the button at the actual installer from the newest release, and show
-// its version and size. Everything here is an upgrade on top of markup that
-// already works: without JS — or if the API is rate-limited — the button still
-// goes to the releases page, which has the same file one click further on.
+// Point each button at the actual file, and show its version and size.
+// Everything here is an upgrade on top of markup that already works: without
+// JS — or if the API is rate-limited — the buttons still go to the releases
+// page, which has the same files one click further on.
+//
+// This asks for the release *list* rather than /latest deliberately. The
+// Windows installer can only be built on Windows and the disk image only on a
+// Mac, so a release routinely carries just one of the two; against /latest,
+// whichever platform missed that release would have nothing to point at. Each
+// button instead walks back to the newest release that actually has its file.
 (function () {
   var REPO = 'henry4324234/henrys_shadowing_app';
-  var button = document.getElementById('download');
-  var meta = document.getElementById('release-meta');
-  var checksum = document.getElementById('checksum-row');
 
-  fetch('https://api.github.com/repos/' + REPO + '/releases/latest')
+  var PLATFORMS = [
+    {
+      key: 'win',
+      asset: /setup.*\.exe$/i,
+      button: document.getElementById('download'),
+      meta: document.getElementById('release-meta'),
+      label: 'Windows 10 or 11 · 64-bit',
+      verifyWhere: 'in PowerShell',
+      verify: function (name) { return 'Get-FileHash .\\' + name; }
+    },
+    {
+      key: 'mac',
+      asset: /\.dmg$/i,
+      button: document.getElementById('download-mac'),
+      meta: document.getElementById('release-meta-mac'),
+      label: 'macOS · Apple Silicon',
+      verifyWhere: 'in Terminal',
+      verify: function (name) { return 'shasum -a 256 ' + name; }
+    }
+  ];
+
+  // Lead with the platform the visitor is on. Only the order and the styling
+  // change — both downloads stay available either way, so a wrong guess costs
+  // nothing.
+  if (/Mac/i.test(navigator.platform || navigator.userAgent || '')) {
+    var row = document.getElementById('downloads');
+    row.insertBefore(document.getElementById('dl-mac'), document.getElementById('dl-win'));
+    document.getElementById('download').classList.add('secondary');
+    document.getElementById('download-mac').classList.remove('secondary');
+  }
+
+  // "v1.0.3 · 100 MB · macOS · Apple Silicon · 26 August 2026"
+  function describe(platform, release, asset) {
+    var parts = [
+      release.tag_name,
+      Math.round(asset.size / (1024 * 1024)) + ' MB',
+      platform.label,
+      new Date(release.published_at).toLocaleDateString(undefined, {
+        year: 'numeric', month: 'long', day: 'numeric'
+      })
+    ];
+    platform.meta.textContent = '';
+    parts.forEach(function (part, i) {
+      if (i) {
+        var sep = document.createElement('span');
+        sep.className = 'sep';
+        sep.textContent = '·';
+        platform.meta.appendChild(document.createTextNode(' '));
+        platform.meta.appendChild(sep);
+        platform.meta.appendChild(document.createTextNode(' '));
+      }
+      var span = document.createElement('span');
+      span.className = 'part';
+      span.textContent = part;
+      platform.meta.appendChild(span);
+    });
+  }
+
+  // The .sha256 belonging to this exact file, not merely the first one in the
+  // release — a release can hold a checksum for each platform.
+  function checksumLine(platform, release, asset) {
+    var sha = (release.assets || []).filter(function (a) {
+      return a.name === asset.name + '.sha256';
+    })[0];
+    if (!sha) { return null; }
+
+    var line = document.createElement('div');
+    var link = document.createElement('a');
+    link.href = sha.browser_download_url;
+    link.textContent = sha.name;
+    var cmd = document.createElement('code');
+    cmd.textContent = platform.verify(asset.name);
+    line.appendChild(document.createTextNode('Check your download against '));
+    line.appendChild(link);
+    line.appendChild(document.createTextNode(' — ' + platform.verifyWhere + ': '));
+    line.appendChild(cmd);
+    return line;
+  }
+
+  fetch('https://api.github.com/repos/' + REPO + '/releases?per_page=30')
     .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
-    .then(function (release) {
-      var assets = release.assets || [];
-      var installer = assets.filter(function (a) { return /setup.*\.exe$/i.test(a.name); })[0];
-      if (!installer) { return; }
-
-      button.href = installer.browser_download_url;
-
-      var parts = [
-        release.tag_name,
-        Math.round(installer.size / (1024 * 1024)) + ' MB',
-        'Windows 10 or 11 · 64-bit',
-        new Date(release.published_at).toLocaleDateString(undefined, {
-          year: 'numeric', month: 'long', day: 'numeric'
-        })
-      ];
-      meta.textContent = '';
-      parts.forEach(function (part, i) {
-        if (i) {
-          var sep = document.createElement('span');
-          sep.className = 'sep';
-          sep.textContent = '·';
-          meta.appendChild(sep);
-        }
-        meta.appendChild(document.createTextNode(part));
+    .then(function (releases) {
+      // Newest first, and never a prerelease — those are for testing, not for
+      // the front page.
+      var published = releases.filter(function (rel) {
+        return !rel.draft && !rel.prerelease;
       });
 
-      var sha = assets.filter(function (a) { return /\.sha256$/i.test(a.name); })[0];
-      if (!sha) { return; }
-      var link = document.createElement('a');
-      link.href = sha.browser_download_url;
-      link.textContent = sha.name;
-      var cmd = document.createElement('code');
-      cmd.textContent = 'Get-FileHash .\\' + installer.name;
-      checksum.textContent = 'Check your download against ';
-      checksum.appendChild(link);
-      checksum.appendChild(document.createTextNode(' — in PowerShell: '));
-      checksum.appendChild(cmd);
+      var lines = [];
+
+      PLATFORMS.forEach(function (platform) {
+        for (var i = 0; i < published.length; i++) {
+          var asset = (published[i].assets || []).filter(function (a) {
+            return platform.asset.test(a.name);
+          })[0];
+          if (!asset) { continue; }
+
+          platform.button.href = asset.browser_download_url;
+          describe(platform, published[i], asset);
+          var line = checksumLine(platform, published[i], asset);
+          if (line) { lines.push(line); }
+          return;
+        }
+      });
+
+      if (lines.length) {
+        var checksum = document.getElementById('checksum-row');
+        checksum.textContent = '';
+        lines.forEach(function (line) { checksum.appendChild(line); });
+      }
     })
     .catch(function () { /* keep the static fallback */ });
 })();
