@@ -92,15 +92,20 @@ pub struct ToolSpec {
 /// assets alongside each release; verify against those, not just a local
 /// hash of whatever was downloaded.
 pub const MANIFEST: &[ToolSpec] = &[
+    // Gyan's release builds rather than BtbN's autobuilds: BtbN deletes old
+    // autobuild tags after a few weeks, which 404s the pinned URL (and with
+    // it every install of a shipped version). Gyan tags releases by ffmpeg
+    // version and the assets stay put. The essentials build carries what the
+    // pipeline asks for — libx264, h264_nvenc/amf/qsv, aac.
     ToolSpec {
         id: ToolId::Ffmpeg,
         display_name: "FFmpeg",
-        version: "N-125515-g35f8f4bdc0",
-        url: "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-10-13-44/ffmpeg-N-125515-g35f8f4bdc0-win64-gpl.zip",
-        sha256: Some("8069a62dfec0b2f57a3f226695b94f4facf1102af517291e4bfd0e3db42df5dc"),
+        version: "9.0.1-essentials",
+        url: "https://github.com/GyanD/codexffmpeg/releases/download/9.0.1/ffmpeg-9.0.1-essentials_build.zip",
+        sha256: Some("fec81ae03971d9dd4be3ebe02e263bd2ec1d789483f931bdba5f5715e65da2e9"),
         kind: PayloadKind::Zip,
         exe_name: "ffmpeg.exe",
-        approx_size: 180 * 1024 * 1024,
+        approx_size: 111_253_802,
     },
     ToolSpec {
         id: ToolId::Deno,

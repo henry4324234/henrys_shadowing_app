@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Henry's Shadowing App — Download for Windows</title>
+<meta name="description" content="Turn any video or audio file into shadowing practice: every sentence transcribed, cut out and repeated with a pause to speak in. Free download for Windows.">
+<link rel="icon" href="favicon.png" type="image/png">
+<meta property="og:title" content="Henry's Shadowing App">
+<meta property="og:description" content="Turn any video or audio file into shadowing practice — every sentence transcribed, cut out and repeated with a pause to speak in.">
+<meta property="og:image" content="icon-512.png">
+<meta property="og:type" content="website">
+<style>
+  :root {
+    --bg: #0b1220;
+    --bg-raised: #121b2d;
+    --bg-sunken: #0a0f1a;
+    --border: #24304a;
+    --text: #e8edf7;
+    --text-muted: #9aa8c2;
+    --accent: #2b7fff;
+    --accent-hover: #4d95ff;
+    --amber: #f5a623;
+    --radius: 14px;
+    --maxw: 860px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    /* A soft glow behind the hero, so the page has some depth without
+       needing an image. */
+    background-image:
+      radial-gradient(900px 460px at 50% -180px, rgba(43,127,255,.22), transparent 70%);
+    background-repeat: no-repeat;
+  }
+
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 20px; }
+
+  /* ---------------------------------------------------------------- hero */
+
+  header.hero { text-align: center; padding: 72px 0 56px; }
+
+  .hero img.logo {
+    width: 104px; height: 104px;
+    border-radius: 24px;
+    filter: drop-shadow(0 12px 32px rgba(0,0,0,.45));
+  }
+
+  h1 {
+    font-size: clamp(2rem, 6vw, 2.75rem);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    margin: 22px 0 10px;
+  }
+
+  .tagline {
+    font-size: clamp(1.05rem, 2.6vw, 1.25rem);
+    color: var(--text-muted);
+    max-width: 34ch;
+    margin: 0 auto 32px;
+  }
+
+  .download {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 1.08rem; font-weight: 600;
+    text-decoration: none;
+    padding: 15px 30px;
+    border-radius: 999px;
+    box-shadow: 0 10px 28px rgba(43,127,255,.35);
+    transition: background .15s ease, transform .15s ease, box-shadow .15s ease;
+  }
+  .download:hover { background: var(--accent-hover); transform: translateY(-1px); box-shadow: 0 14px 32px rgba(43,127,255,.42); }
+  .download:active { transform: translateY(0); }
+  .download svg { width: 20px; height: 20px; flex: none; }
+
+  .release-meta { margin-top: 14px; font-size: .9rem; color: var(--text-muted); }
+  .release-meta a { color: var(--text-muted); }
+  .release-meta .sep { opacity: .5; padding: 0 6px; }
+
+  /* ------------------------------------------------------------- sections */
+
+  section { padding: 44px 0; border-top: 1px solid var(--border); }
+
+  h2 {
+    font-size: 1.35rem;
+    letter-spacing: -0.01em;
+    margin: 0 0 8px;
+  }
+
+  .section-lede { color: var(--text-muted); margin: 0 0 26px; }
+
+  ol.steps { counter-reset: step; list-style: none; margin: 0; padding: 0; }
+  ol.steps li {
+    counter-increment: step;
+    position: relative;
+    padding: 0 0 0 46px;
+    margin: 0 0 22px;
+  }
+  ol.steps li:last-child { margin-bottom: 0; }
+  ol.steps li::before {
+    content: counter(step);
+    position: absolute; left: 0; top: 1px;
+    width: 30px; height: 30px;
+    display: grid; place-items: center;
+    border-radius: 50%;
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    color: var(--accent);
+    font-size: .85rem; font-weight: 700;
+  }
+  ol.steps b { display: block; font-weight: 600; }
+  ol.steps span { color: var(--text-muted); }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  .card {
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+  }
+  .card h3 { margin: 0 0 6px; font-size: 1rem; }
+  .card p { margin: 0; color: var(--text-muted); font-size: .94rem; }
+
+  .note {
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--amber);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin: 22px 0 0;
+  }
+  .note p { margin: 0; font-size: .94rem; color: var(--text-muted); }
+  .note strong { color: var(--text); }
+
+  dl.facts { margin: 0; }
+  dl.facts div {
+    display: grid;
+    grid-template-columns: 190px 1fr;
+    gap: 6px 20px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  dl.facts div:last-child { border-bottom: 0; }
+  dl.facts dt { color: var(--text-muted); font-size: .94rem; }
+  dl.facts dd { margin: 0; font-size: .94rem; }
+
+  code {
+    background: var(--bg-sunken);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px 6px;
+    font-family: ui-monospace, SFMono-Regular, "Cascadia Mono", Consolas, monospace;
+    font-size: .87em;
+    overflow-wrap: anywhere;
+  }
+
+  a { color: var(--accent-hover); }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 30px 0 60px;
+    color: var(--text-muted);
+    font-size: .9rem;
+    text-align: center;
+  }
+
+  @media (max-width: 560px) {
+    header.hero { padding: 48px 0 40px; }
+    dl.facts div { grid-template-columns: 1fr; gap: 2px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="hero">
+    <img class="logo" src="icon-128.png" width="128" height="128" alt="">
+    <h1>Henry's Shadowing App</h1>
+    <p class="tagline">Turn any video or audio into shadowing practice — every sentence cut out, repeated, and waiting for you to speak.</p>
+
+    <a class="download" id="download"
+       href="https://github.com/henry4324234/henrys_shadowing_app/releases/latest">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 3v12"></path><path d="m7 11 5 5 5-5"></path><path d="M4 20h16"></path>
+      </svg>
+      Download for Windows
+    </a>
+
+    <p class="release-meta" id="release-meta">Windows 10 or 11 &middot; 64-bit</p>
+  </header>
+
+  <section>
+    <h2>What it does</h2>
+    <p class="section-lede">Shadowing means hearing a sentence in the language you are learning and saying it straight back, again and again. The tedious part is the editing. This does that part.</p>
+    <ol class="steps">
+      <li><b>Paste a link or drop in a file</b><span>A video URL, or audio you already have — mp3, wav, m4a, flac, ogg, aac. Queue as many as you like.</span></li>
+      <li><b>It transcribes the speech</b><span>A Whisper engine finds every sentence and exactly where it starts and ends. It can write an English translation alongside, and strip backing music out of the way first.</span></li>
+      <li><b>It cuts and repeats</b><span>Each sentence becomes its own clip, played as many times as you choose, with a gap after each one scaled to the sentence — long enough to say it back.</span></li>
+      <li><b>You get one video to practise with</b><span>Every sentence in order, optionally with the text on screen. Play it anywhere: phone, TV, in the car.</span></li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Yours to adjust</h2>
+    <div class="cards">
+      <div class="card">
+        <h3>Repeats and gaps</h3>
+        <p>How many times each sentence plays, and how long the silence after it lasts relative to the sentence.</p>
+      </div>
+      <div class="card">
+        <h3>Sentence length</h3>
+        <p>Long sentences are split on a natural pause, so nothing outruns your working memory.</p>
+      </div>
+      <div class="card">
+        <h3>Text on screen</h3>
+        <p>Burn in the transcript, with an English translation underneath if you want one.</p>
+      </div>
+      <div class="card">
+        <h3>Accuracy against speed</h3>
+        <p>Choose the Whisper model size. Bigger models catch more, and take longer.</p>
+      </div>
+      <div class="card">
+        <h3>Several at once</h3>
+        <p>Queue a batch and let it work through them; two run side by side by default.</p>
+      </div>
+      <div class="card">
+        <h3>Try before committing</h3>
+        <p>Cap a job to the first few minutes to check your settings on a long video.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Installing it</h2>
+    <ol class="steps">
+      <li><b>Run the installer</b><span>It installs just for you, inside your own user folder — no administrator password needed.</span></li>
+      <li><b>Click past the Windows warning</b><span>The installer is not code-signed, so SmartScreen shows a blue &ldquo;Windows protected your PC&rdquo; box. Choose <em>More info</em>, then <em>Run anyway</em>.</span></li>
+      <li><b>Let it fetch the transcription engine</b><span>The first time you open the app it offers to download the Whisper engine — about 1.4 GB, unpacking to roughly 4.5 GB. That happens once, inside the app, with a progress bar.</span></li>
+    </ol>
+
+    <div class="note">
+      <p><strong>An NVIDIA graphics card makes this much faster.</strong> Transcribing and rendering both use the GPU when there is one. It works without, it just takes considerably longer.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>The details</h2>
+    <dl class="facts">
+      <div>
+        <dt>Runs on</dt>
+        <dd>Windows 10 or 11, 64-bit</dd>
+      </div>
+      <div>
+        <dt>Installs to</dt>
+        <dd><code>%LOCALAPPDATA%\Programs\Henrys Shadowing App</code> — per user, no admin rights</dd>
+      </div>
+      <div>
+        <dt>Comes with</dt>
+        <dd>FFmpeg, yt-dlp and Deno, bundled so there is nothing else to install. The exact pinned versions are listed in each release&rsquo;s notes.</dd>
+      </div>
+      <div>
+        <dt>Downloads later</dt>
+        <dd>The Faster-Whisper transcription engine, on first run, into <code>%LOCALAPPDATA%\henrys_shadowing_app</code></dd>
+      </div>
+      <div>
+        <dt>Disk space</dt>
+        <dd>About 400 MB installed, plus roughly 5 GB once the engine is unpacked</dd>
+      </div>
+      <div>
+        <dt>Uninstalling</dt>
+        <dd>Settings &rsaquo; Apps &rsaquo; Installed apps, like anything else. It asks whether to delete the downloaded engine too, and keeps it unless you say otherwise.</dd>
+      </div>
+      <div>
+        <dt>Checksum</dt>
+        <dd id="checksum-row">Every release ships a <code>.sha256</code> file next to the installer.</dd>
+      </div>
+      <div>
+        <dt>Source code</dt>
+        <dd><a href="https://github.com/henry4324234/henrys_shadowing_app">github.com/henry4324234/henrys_shadowing_app</a></dd>
+      </div>
+    </dl>
+  </section>
+
+  <footer>
+    <p>Built by Henry &middot; <a href="https://github.com/henry4324234/henrys_shadowing_app/releases">All releases</a> &middot; <a href="https://github.com/henry4324234/henrys_shadowing_app/issues">Report a problem</a></p>
+  </footer>
+
+</div>
+
+<script>
+// Point the button at the actual installer from the newest release, and show
+// its version and size. Everything here is an upgrade on top of markup that
+// already works: without JS — or if the API is rate-limited — the button still
+// goes to the releases page, which has the same file one click further on.
+(function () {
+  var REPO = 'henry4324234/henrys_shadowing_app';
+  var button = document.getElementById('download');
+  var meta = document.getElementById('release-meta');
+  var checksum = document.getElementById('checksum-row');
+
+  fetch('https://api.github.com/repos/' + REPO + '/releases/latest')
+    .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+    .then(function (release) {
+      var assets = release.assets || [];
+      var installer = assets.filter(function (a) { return /setup.*\.exe$/i.test(a.name); })[0];
+      if (!installer) { return; }
+
+      button.href = installer.browser_download_url;
+
+      var parts = [
+        release.tag_name,
+        Math.round(installer.size / (1024 * 1024)) + ' MB',
+        'Windows 10 or 11 · 64-bit',
+        new Date(release.published_at).toLocaleDateString(undefined, {
+          year: 'numeric', month: 'long', day: 'numeric'
+        })
+      ];
+      meta.textContent = '';
+      parts.forEach(function (part, i) {
+        if (i) {
+          var sep = document.createElement('span');
+          sep.className = 'sep';
+          sep.textContent = '·';
+          meta.appendChild(sep);
+        }
+        meta.appendChild(document.createTextNode(part));
+      });
+
+      var sha = assets.filter(function (a) { return /\.sha256$/i.test(a.name); })[0];
+      if (!sha) { return; }
+      var link = document.createElement('a');
+      link.href = sha.browser_download_url;
+      link.textContent = sha.name;
+      var cmd = document.createElement('code');
+      cmd.textContent = 'Get-FileHash .\\' + installer.name;
+      checksum.textContent = 'Check your download against ';
+      checksum.appendChild(link);
+      checksum.appendChild(document.createTextNode(' — in PowerShell: '));
+      checksum.appendChild(cmd);
+    })
+    .catch(function () { /* keep the static fallback */ });
+})();
+</script>
+
+</body>
+</html>
