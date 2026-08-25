@@ -1,7 +1,7 @@
 # Shipping a release
 
-Everything needed to turn the app into a downloadable Windows installer, and to
-put that installer behind a download page.
+Everything needed to turn the app into a downloadable installer, and to put that
+installer behind a download page.
 
 ```
 packaging/
@@ -9,7 +9,13 @@ packaging/
     installer.iss        the Inno Setup script
     build_installer.ps1  build the exe, stage bin\, compile the installer
     publish_release.ps1  upload it to GitHub Releases
+    macos/
+        Info.plist       bundle metadata, @VERSION@ substituted at build time
+        stage_bin.sh     the same fetch + verify, for the arm64 helpers
+        build_app.sh     assemble the .app, sign it, produce the .dmg
     staging/, dist/, .cache/    generated, git-ignored
+.github/workflows/
+    macos.yml            builds the Mac app on a runner (see below)
 docs/
     index.html           the download page (GitHub Pages)
 ```
@@ -75,6 +81,37 @@ page.
 GitHub repo → **Settings → Pages → Build and deployment → Deploy from a branch**,
 branch `master`, folder `/docs`. It then serves at
 <https://henry4324234.github.io/henrys_shadowing_app/>.
+
+## The macOS build
+
+Building a Mac app needs a Mac, and this project is developed on Windows, so it
+happens on a GitHub Actions runner: **Actions → macOS build → Run workflow**, or
+automatically on a `v*` tag. The `.dmg` comes back as an artifact.
+
+Locally, on a Mac, the same thing is one command:
+
+```bash
+./packaging/macos/build_app.sh
+```
+
+Three things about it differ from the Windows story, and all three are
+deliberate:
+
+- **Apple Silicon only.** The ffmpeg and deno pinned for macOS are arm64 builds,
+  so a universal app would carry helpers half of it could not run. Supporting
+  Intel means pinning a second set and lipo-ing the binary.
+- **A weaker engine.** Purfview publishes no Apple Silicon build and no XXL
+  build for macOS; the newest Mac asset is the plain Whisper-Faster r186.1,
+  x86-64, from 2024. It runs under Rosetta 2 on the CPU. A system `whisperx` is
+  preferred when present and is the faster option on Apple Silicon, since it can
+  reach the GPU through MPS. That older engine also rejects the XXL-only
+  `--sentence` and `--beep_off` flags, which is why the standalone backend reads
+  the engine's own `--help` before passing them.
+- **Ad-hoc signed, not notarised.** Enough for the binary to launch on arm64,
+  which refuses unsigned code outright — but not enough for Gatekeeper, so a
+  downloaded copy needs right-click → *Open* the first time. Proper signing
+  needs a paid Apple Developer account; with one, swap the ad-hoc `codesign` in
+  `build_app.sh` for a Developer ID identity and add a `notarytool` submission.
 
 ## Bumping a bundled tool
 
