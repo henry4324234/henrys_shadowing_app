@@ -132,9 +132,27 @@ $haveAll = $true
 foreach ($exe in $wanted) {
     if (-not (Test-Path -LiteralPath (Join-Path $StageBin $exe))) { $haveAll = $false }
 }
-if ($haveAll -and -not $Force) {
-    Write-Host "bin\ already staged (use -Force to rebuild it)" -ForegroundColor Green
+
+# What the staging dir holds, recorded when it was filled. Without this, a
+# version bump in src\download.rs is invisible here - the exes all exist, so
+# staging is skipped and the installer quietly ships the old tool. That is not
+# hypothetical: it is how a build "fixing" a stale yt-dlp shipped the stale one.
+$stampFile = Join-Path $StageBin 'staged-versions.txt'
+$expected = (@('Ffmpeg', 'Deno', 'YtDlp') | ForEach-Object {
+    '{0}={1}' -f $_, $manifest[$_].Version
+}) -join "`r`n"
+$staged = if (Test-Path -LiteralPath $stampFile) {
+    (Get-Content -Raw -LiteralPath $stampFile).Trim()
 } else {
+    ''
+}
+
+if ($haveAll -and $staged -eq $expected -and -not $Force) {
+    Write-Host "bin\ already staged at the pinned versions (use -Force to rebuild it)" -ForegroundColor Green
+} else {
+    if ($haveAll -and $staged -ne $expected) {
+        Write-Host "pinned versions changed - restaging" -ForegroundColor Yellow
+    }
     New-Item -ItemType Directory -Path $CacheDir -Force | Out-Null
     if (Test-Path -LiteralPath $StageBin) { Remove-Item -LiteralPath $StageBin -Recurse -Force }
     New-Item -ItemType Directory -Path $StageBin -Force | Out-Null
@@ -157,10 +175,14 @@ if ($haveAll -and -not $Force) {
     Copy-Item -LiteralPath $ytdlp -Destination (Join-Path $StageBin 'yt-dlp.exe') -Force
 
     if (Test-Path -LiteralPath $WorkDir) { Remove-Item -LiteralPath $WorkDir -Recurse -Force }
+
+    # Written last, so an interrupted staging leaves no stamp and the next run
+    # redoes it rather than trusting a half-filled directory.
+    Set-Content -Encoding ascii -LiteralPath $stampFile -Value $expected
 }
 
 Write-Host ""
 Write-Host ("staged in {0}" -f $StageBin)
-Get-ChildItem -Path $StageBin -File | ForEach-Object {
+Get-ChildItem -Path $StageBin -File -Filter '*.exe' | ForEach-Object {
     "{0,-14} {1,8:N1} MB  {2}" -f $_.Name, ($_.Length / 1MB), (Get-Sha256 $_.FullName)
 }

@@ -120,12 +120,18 @@ pub const MANIFEST: &[ToolSpec] = &[
     ToolSpec {
         id: ToolId::YtDlp,
         display_name: "yt-dlp",
-        version: "2026.07.04",
-        url: "https://github.com/yt-dlp/yt-dlp/releases/download/2026.07.04/yt-dlp.exe",
-        sha256: Some("52fe3c26dcf71fbdc85b528589020bb0b8e383155cfa81b64dd447bbe35e24b8"),
+        // Keep this one close to current. YouTube rotates whatever the
+        // extractor has to defeat, and a yt-dlp that is a few weeks old starts
+        // taking `HTTP Error 403: Forbidden` on the media URL for more and
+        // more videos while still working on others - which reads as "your app
+        // is broken", not "this tool is stale". Verified against the
+        // SHA2-256SUMS published with the release.
+        version: "2026.08.19",
+        url: "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp.exe",
+        sha256: Some("66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a"),
         kind: PayloadKind::RawExe,
         exe_name: "yt-dlp.exe",
-        approx_size: 18 * 1024 * 1024,
+        approx_size: 17_840_399,
     },
     ToolSpec {
         id: ToolId::FasterWhisper,
