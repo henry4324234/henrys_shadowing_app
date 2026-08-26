@@ -64,23 +64,3 @@ jobs:
             packaging/dist/*.dmg
             packaging/dist/*.dmg.sha256
           if-no-files-found: error
-
-  engine-cli:
-    name: What the macOS engine accepts
-    # Purfview ships only an x86-64 Mac build, so run it on the Intel runner
-    # where it needs no Rosetta. This is here to answer one question - which
-    # flags the older engine understands - and can go once that is settled.
-    runs-on: macos-13
-    steps:
-      - name: Fetch and interrogate the engine
-        run: |
-          curl -fsSL -o engine.zip \
-            https://github.com/Purfview/whisper-standalone-win/releases/download/faster-whisper/Whisper-Faster_r186.1_macOS-x86-64.zip
-          echo "863e9d41cd889bfd5417bec5d8d48f04d0a0e6c97b6f45c7910a85e08798a3bc  engine.zip" | shasum -a 256 -c -
-          unzip -q engine.zip
-          chmod +x Whisper-Faster/whisper-faster
-          ./Whisper-Faster/whisper-faster --help 2>&1 | tee help.txt | head -80
-          echo "--- flags the pipeline wants ---"
-          for flag in --sentence --beep_off --word_timestamps --output_format --task --device; do
-            if grep -q -- "$flag" help.txt; then echo "supported:   $flag"; else echo "MISSING:     $flag"; fi
-          done

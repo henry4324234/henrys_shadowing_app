@@ -1065,10 +1065,16 @@ fn transcribe_to_segments(
 /// own `--help`. Probed once per process and cached: `--help` costs a subprocess
 /// spawn, and the answer cannot change while the app is running.
 ///
-/// This exists because two different engines answer to the same call site.
-/// Windows gets Faster-Whisper-XXL, macOS gets the older plain Whisper-Faster
-/// (the only Mac build Purfview ships), and the XXL-only flags are fatal to the
-/// latter rather than ignored.
+/// This exists because two different engines answer to the same call site:
+/// Windows gets Faster-Whisper-XXL, macOS the older plain Whisper-Faster (the
+/// only Mac build Purfview ships), and an engine that does not know a flag dies
+/// on it rather than ignoring it.
+///
+/// Worth knowing before trusting the comment over the code: r186.1, the pinned
+/// Mac engine, documents both `--sentence` and `--beep_off` in its own help -
+/// verified by running it. So this probe answers yes on both platforms today
+/// and changes nothing. It earns its place as insurance for when the pin moves,
+/// not as a workaround for a difference that currently exists.
 fn engine_accepts(engine: &Path, flag: &str) -> bool {
     use std::collections::HashMap;
     use std::sync::Mutex;

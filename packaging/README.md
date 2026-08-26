@@ -104,9 +104,12 @@ deliberate:
   build for macOS; the newest Mac asset is the plain Whisper-Faster r186.1,
   x86-64, from 2024. It runs under Rosetta 2 on the CPU. A system `whisperx` is
   preferred when present and is the faster option on Apple Silicon, since it can
-  reach the GPU through MPS. That older engine also rejects the XXL-only
-  `--sentence` and `--beep_off` flags, which is why the standalone backend reads
-  the engine's own `--help` before passing them.
+  reach the GPU through MPS. The standalone backend reads the engine's own
+  `--help` before passing `--sentence` and `--beep_off`, so that an engine which
+  does not understand them still runs. Measured on r186.1 itself, both flags
+  *are* documented in its help, so today that probe passes them through on
+  either platform - it is insurance against the pin moving, not a workaround for
+  something currently broken.
 - **Ad-hoc signed, not notarised.** Enough for the binary to launch on arm64,
   which refuses unsigned code outright — but not enough for Gatekeeper, so a
   downloaded copy needs right-click → *Open* the first time. Proper signing
