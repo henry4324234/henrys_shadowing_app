@@ -42,10 +42,41 @@
   }
 
   .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 20px; }
+  /* The hero alone runs wider than the prose: it has to hold a screenshot of a
+     desktop app beside the buttons, and 860px would squeeze both. */
+  .wrap.wide { max-width: 1180px; }
 
   /* ---------------------------------------------------------------- hero */
 
   header.hero { text-align: center; padding: 72px 0 56px; }
+
+  .hero-shot { margin: 40px auto 0; max-width: 720px; }
+  .hero-shot img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    /* Lifts the window off the page, the way a real one sits above a desktop. */
+    box-shadow: 0 24px 60px rgba(0, 0, 0, .55);
+  }
+
+  /* Side by side once there is room for both columns to breathe. Below this
+     the screenshot drops underneath and everything re-centres. */
+  @media (min-width: 980px) {
+    header.hero {
+      display: flex;
+      align-items: center;
+      gap: 48px;
+      text-align: left;
+      padding: 64px 0 60px;
+    }
+    .hero-copy { flex: 0 1 420px; }
+    .hero-copy .tagline { margin-left: 0; margin-right: 0; }
+    .hero-copy .downloads { justify-content: flex-start; }
+    .hero-copy .release-meta { text-align: left; }
+    .hero-shot { flex: 1 1 0; min-width: 0; margin: 0; max-width: none; }
+  }
 
   .hero img.logo {
     width: 104px; height: 104px;
@@ -216,9 +247,10 @@
 </head>
 <body>
 
-<div class="wrap">
+<div class="wrap wide">
 
   <header class="hero">
+   <div class="hero-copy">
     <img class="logo" src="icon-128.png" width="128" height="128" alt="">
     <h1>Henry's Shadowing App</h1>
     <p class="tagline">Turn any video or audio into shadowing practice — every sentence cut out, repeated, and waiting for you to speak.</p>
@@ -246,7 +278,17 @@
         <p class="release-meta" id="release-meta-mac">macOS &middot; Apple Silicon</p>
       </div>
     </div>
+   </div>
+
+    <div class="hero-shot">
+      <img src="app-window.webp" width="1400" height="1024"
+           alt="The app window: a pasted video queued and part-way through transcription, with settings for repeats, gap length and sentence length above it.">
+    </div>
   </header>
+
+</div>
+
+<div class="wrap">
 
   <section>
     <h2>What it does</h2>
