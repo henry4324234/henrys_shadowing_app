@@ -286,7 +286,7 @@ impl Stage {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum WhisperModel {
     Tiny,
     Base,
@@ -1843,6 +1843,21 @@ fn parse_srt_timestamp(ts: &str) -> Option<f64> {
 // whisper.cpp
 // ---------------------------------------------------------------------------
 
+/// Whether the whisper.cpp engine is on hand at all.
+///
+/// It ships inside the app, so this is normally true; it answers false in a
+/// dev build run straight out of `target/`, where there is no bundle to carry
+/// it. The model prompts key off this, because offering to download a model
+/// for an engine that is not there would be a dead end.
+pub fn whispercpp_available() -> bool {
+    crate::download::resolve_program("whisper-cli").is_file()
+}
+
+/// Whether `model` can be used right now without downloading anything.
+pub fn model_ready(model: WhisperModel) -> bool {
+    whispercpp_model_path(model).is_some()
+}
+
 /// Where the GGML file for `model` is, if we have it.
 ///
 /// Two places, in order: bundled inside the app for the one model that ships
@@ -1858,8 +1873,7 @@ fn whispercpp_model_path(model: WhisperModel) -> Option<PathBuf> {
             return Some(candidate);
         }
     }
-    let managed = crate::download::managed_root()?.join("models").join(file);
-    managed.is_file().then_some(managed)
+    crate::download::installed_exe(crate::download::ToolId::WhisperModel(model))
 }
 
 /// whisper.cpp backend. The reason it exists: it reaches the GPU through Metal,

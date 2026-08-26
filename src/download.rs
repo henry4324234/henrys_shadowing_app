@@ -50,6 +50,10 @@ pub enum ToolId {
     Deno,
     YtDlp,
     FasterWhisper,
+    /// One whisper.cpp GGML model. Unlike the tools, these are per-accuracy
+    /// and platform-neutral - the same file works on either OS - so they live
+    /// in `MODEL_MANIFEST` rather than in the per-target lists below.
+    WhisperModel(crate::pipeline::WhisperModel),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -205,9 +209,76 @@ pub const MANIFEST: &[ToolSpec] = &[
     },
 ];
 
+/// The whisper.cpp models, one per accuracy setting.
+///
+/// Deliberately *not* inside the per-`target_os` MANIFESTs above. A GGML file
+/// is the same bytes on either platform, so duplicating these per OS would be
+/// five entries to keep in step for no benefit - and the packaging scripts that
+/// read `src/download.rs` walk the per-target lists, which would then have
+/// counted every model twice.
+///
+/// The smallest ships inside the app (see `bundled_model_dir`), and is listed
+/// here anyway so an install that somehow lacks it can still fetch it.
+///
+/// Hashes are the LFS object ids from the HuggingFace API, which are plain
+/// SHA-256 of the file - verified against a locally computed hash for tiny.
+pub const MODEL_MANIFEST: &[ToolSpec] = &[
+    ToolSpec {
+        id: ToolId::WhisperModel(crate::pipeline::WhisperModel::Tiny),
+        display_name: "Transcription model (Lowest Accuracy)",
+        version: "ggml-tiny",
+        url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin",
+        sha256: Some("be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21"),
+        kind: PayloadKind::RawExe,
+        exe_name: "ggml-tiny.bin",
+        approx_size: 77_691_713,
+    },
+    ToolSpec {
+        id: ToolId::WhisperModel(crate::pipeline::WhisperModel::Base),
+        display_name: "Transcription model (Low Accuracy)",
+        version: "ggml-base",
+        url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
+        sha256: Some("60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe"),
+        kind: PayloadKind::RawExe,
+        exe_name: "ggml-base.bin",
+        approx_size: 147_951_465,
+    },
+    ToolSpec {
+        id: ToolId::WhisperModel(crate::pipeline::WhisperModel::Small),
+        display_name: "Transcription model (Medium Accuracy)",
+        version: "ggml-small",
+        url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
+        sha256: Some("1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b"),
+        kind: PayloadKind::RawExe,
+        exe_name: "ggml-small.bin",
+        approx_size: 487_601_967,
+    },
+    ToolSpec {
+        id: ToolId::WhisperModel(crate::pipeline::WhisperModel::Medium),
+        display_name: "Transcription model (High Accuracy)",
+        version: "ggml-medium",
+        url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin",
+        sha256: Some("6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208"),
+        kind: PayloadKind::RawExe,
+        exe_name: "ggml-medium.bin",
+        approx_size: 1_533_763_059,
+    },
+    ToolSpec {
+        id: ToolId::WhisperModel(crate::pipeline::WhisperModel::LargeV3),
+        display_name: "Transcription model (Highest Accuracy)",
+        version: "ggml-large-v3",
+        url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin",
+        sha256: Some("64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2"),
+        kind: PayloadKind::RawExe,
+        exe_name: "ggml-large-v3.bin",
+        approx_size: 3_095_033_483,
+    },
+];
+
 pub fn spec(id: ToolId) -> &'static ToolSpec {
     MANIFEST
         .iter()
+        .chain(MODEL_MANIFEST.iter())
         .find(|s| s.id == id)
         .expect("every ToolId has a manifest entry")
 }
@@ -294,6 +365,12 @@ fn tool_dir(spec: &ToolSpec) -> Option<PathBuf> {
         ToolId::Deno => format!("deno-{}", spec.version),
         ToolId::YtDlp => format!("yt-dlp-{}", spec.version),
         ToolId::FasterWhisper => format!("faster-whisper-{}", spec.version),
+        // Models sit under models/ rather than tools/: they are data, and
+        // keeping them apart means the engine and its models can be cleared
+        // independently.
+        ToolId::WhisperModel(_) => {
+            return Some(managed_root()?.join("models").join(spec.version));
+        }
     };
     Some(managed_root()?.join("tools").join(dir_name))
 }

@@ -1485,6 +1485,10 @@ impl eframe::App for App {
 
             ui.add_space(8.0);
 
+            // Set inside the settings closure, acted on after it: starting a
+            // download borrows self mutably, which is not available in there.
+            let mut model_download: Option<download::ToolId> = None;
+
             // Settings card: everything that shapes how clips are produced.
             theme::card().show(ui, |ui| {
                 // Stretch to the panel's full width (the source card above gets
@@ -1518,6 +1522,18 @@ impl eframe::App for App {
                              Larger = more accurate sentence boundaries, slower, more VRAM.\n\
                              Each model downloads on first use.",
                         );
+
+                    // Say so when the chosen accuracy needs fetching, right next
+                    // to the choice that caused it, rather than letting the job
+                    // discover it later. The smallest ships with the app, so this
+                    // stays out of the way until someone asks for more.
+                    if pipeline::whispercpp_available() && !pipeline::model_ready(self.whisper_model)
+                    {
+                        let id = download::ToolId::WhisperModel(self.whisper_model);
+                        if let Some(id) = download_button(ui, id, self.dl_active.is_some()) {
+                            model_download = Some(id);
+                        }
+                    }
 
                     ui.add_space(8.0);
 
@@ -1731,6 +1747,10 @@ impl eframe::App for App {
                     }
                 });
             });
+
+            if let Some(id) = model_download {
+                self.start_tool_download(id);
+            }
         });
 
         // ---------- Bottom bar: global controls + the main actions ----------
