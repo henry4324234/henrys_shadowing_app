@@ -12,6 +12,7 @@ packaging/
     macos/
         Info.plist       bundle metadata, @VERSION@ substituted at build time
         stage_bin.sh     the same fetch + verify, for the arm64 helpers
+        build_whispercpp.sh  compile whisper.cpp with Metal, stage it + a model
         build_app.sh     assemble the .app, sign it, produce the .dmg
     staging/, dist/, .cache/    generated, git-ignored
 .github/workflows/
@@ -100,16 +101,29 @@ deliberate:
 - **Apple Silicon only.** The ffmpeg and deno pinned for macOS are arm64 builds,
   so a universal app would carry helpers half of it could not run. Supporting
   Intel means pinning a second set and lipo-ing the binary.
-- **A weaker engine.** Purfview publishes no Apple Silicon build and no XXL
-  build for macOS; the newest Mac asset is the plain Whisper-Faster r186.1,
-  x86-64, from 2024. It runs under Rosetta 2 on the CPU. A system `whisperx` is
-  preferred when present and is the faster option on Apple Silicon, since it can
-  reach the GPU through MPS. The standalone backend reads the engine's own
-  `--help` before passing `--sentence` and `--beep_off`, so that an engine which
-  does not understand them still runs. Measured on r186.1 itself, both flags
-  *are* documented in its help, so today that probe passes them through on
-  either platform - it is insurance against the pin moving, not a workaround for
-  something currently broken.
+- **A compiled engine, not a downloaded one.** The Mac transcribes with
+  whisper.cpp, because it is the only backend that reaches the GPU here:
+  CTranslate2, which Purfview's engine and whisperx both use, has no Metal
+  support at all, and the only Mac build Purfview ships is x86-64 and runs under
+  Rosetta on the CPU. Measured on an M1 Max, same clip: `small` went from 2.2 to
+  17 audio-seconds/s, and `tiny` from 8.9 to 31.
+
+  whisper.cpp publishes no macOS command-line binary — its releases carry
+  Windows builds, Linux builds and an Apple xcframework — so there is no
+  permanent release asset to pin the way ffmpeg and yt-dlp are.
+  `build_whispercpp.sh` compiles it from a pinned tag, which makes the binary
+  ours: if it is wrong, it is ours to fix. It checks the result really is arm64,
+  because an x86-64 build would still run, under Rosetta, and quietly give up
+  the whole point.
+
+  The smallest model ships inside the app (74 MB, in `Contents/Resources/models`)
+  so a fresh install can transcribe immediately. The larger ones are downloaded
+  on demand through the same pinned-and-checksummed path as every other
+  component — see `MODEL_MANIFEST` in `src/download.rs`, which is deliberately
+  *one* list rather than one per platform, because a GGML file is identical on
+  both.
+
+  Purfview's engine is still the fallback, and the only backend on Windows.
 - **Ad-hoc signed, not notarised.** Enough for the binary to launch on arm64,
   which refuses unsigned code outright — but not enough for Gatekeeper, so a
   downloaded copy needs right-click → *Open* the first time. Proper signing

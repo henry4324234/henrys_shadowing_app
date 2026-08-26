@@ -1584,6 +1584,18 @@ impl eframe::App for App {
                     // the other global controls in the bottom bar.
                 });
 
+                // Progress for a model fetch, directly under the row that asked
+                // for it. Every other download in the app is watched from the
+                // engine window; a model is started from here, so without this
+                // the only feedback is a button going grey — which for the 3 GB
+                // model means minutes of looking like a hang.
+                if matches!(
+                    self.dl_active.as_ref().map(|a| a.id),
+                    Some(download::ToolId::WhisperModel(_))
+                ) {
+                    self.ui_download_status(ui);
+                }
+
                 // Chunk/repeat/duration controls.
                 ui.horizontal_wrapped(|ui| {
                     ui.label(egui::RichText::new("Repeats").color(theme::palette().text_muted));

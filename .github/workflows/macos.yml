@@ -25,6 +25,16 @@ jobs:
       - name: Test
         run: cargo test --release
 
+      # whisper.cpp is compiled rather than downloaded - it publishes no macOS
+      # command-line binary - and the model beside it is 74 MB. Both are pinned,
+      # so a hit here is the same bytes a rebuild would produce, and it turns
+      # several minutes of compiling into seconds.
+      - name: Cache the whisper.cpp build and its model
+        uses: actions/cache@v4
+        with:
+          path: packaging/.cache/whispercpp
+          key: whispercpp-${{ runner.os }}-${{ hashFiles('packaging/macos/build_whispercpp.sh') }}
+
       - name: Build the .app and .dmg
         run: ./packaging/macos/build_app.sh
 
@@ -41,6 +51,31 @@ jobs:
           done
           "packaging/dist/mac/Henry's Shadowing App.app/Contents/Resources/bin/yt-dlp" --version
           "packaging/dist/mac/Henry's Shadowing App.app/Contents/Resources/bin/deno" --version
+
+      - name: Check whisper.cpp shipped, is arm64, and can transcribe
+        run: |
+          RES="packaging/dist/mac/Henry's Shadowing App.app/Contents/Resources"
+          CLI="$RES/bin/whisper-cli"
+          MODEL="$RES/models/ggml-tiny.bin"
+
+          test -x "$CLI"   || { echo "MISSING whisper-cli"; exit 1; }
+          test -f "$MODEL" || { echo "MISSING bundled model"; exit 1; }
+
+          # An x86-64 build would still run here, under Rosetta, on the CPU -
+          # and silently give up the entire reason for using whisper.cpp. Fail
+          # loudly instead of shipping something merely functional.
+          ARCH="$(lipo -archs "$CLI")"
+          echo "whisper-cli arch: $ARCH"
+          [ "$ARCH" = "arm64" ] || { echo "expected arm64"; exit 1; }
+
+          # A runner has no GPU worth the name, so this proves the binary,
+          # the model and the JSON contract - not the speed.
+          "$RES/bin/ffmpeg" -hide_banner -loglevel error -f lavfi \
+            -i "sine=frequency=440:duration=2" -ar 16000 -ac 1 /tmp/probe.wav
+          "$CLI" -m "$MODEL" -f /tmp/probe.wav -l auto -ojf -of /tmp/probe >/dev/null 2>&1
+          test -f /tmp/probe.json || { echo "no JSON produced"; exit 1; }
+          python3 -c "import json,sys; json.load(open('/tmp/probe.json'))['transcription']"
+          echo "ok: whisper.cpp ran and produced parseable JSON"
 
       - name: Check the bundle launches far enough to open a window
         run: |
