@@ -71,6 +71,10 @@ rm -rf "$ICONSET"
 echo
 echo "[3/5] staging Contents/Resources/bin"
 ./packaging/macos/stage_bin.sh "$APP/Contents/Resources/bin"
+echo
+./packaging/macos/build_whispercpp.sh \
+	"$APP/Contents/Resources/bin" \
+	"$APP/Contents/Resources/models"
 
 # --- 4. Sign ------------------------------------------------------------------
 echo

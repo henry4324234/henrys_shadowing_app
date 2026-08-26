@@ -315,6 +315,30 @@ impl WhisperModel {
             WhisperModel::LargeV3 => "large-v3",
         }
     }
+
+    /// The GGML file this model is distributed as, without a path.
+    pub fn ggml_file(&self) -> &'static str {
+        match self {
+            WhisperModel::Tiny => "ggml-tiny.bin",
+            WhisperModel::Base => "ggml-base.bin",
+            WhisperModel::Small => "ggml-small.bin",
+            WhisperModel::Medium => "ggml-medium.bin",
+            WhisperModel::LargeV3 => "ggml-large-v3.bin",
+        }
+    }
+
+    /// What `--dtw` wants. Its own spelling, close to but not the same as the
+    /// filename: dots rather than hyphens for the large variants, and it
+    /// rejects anything off its list rather than ignoring it.
+    fn whispercpp_dtw_value(&self) -> &'static str {
+        match self {
+            WhisperModel::Tiny => "tiny",
+            WhisperModel::Base => "base",
+            WhisperModel::Small => "small",
+            WhisperModel::Medium => "medium",
+            WhisperModel::LargeV3 => "large.v3",
+        }
+    }
 }
 
 pub fn run_pipeline(
@@ -1077,6 +1101,29 @@ fn transcribe_to_segments(
     cancel: &AtomicBool,
     on_progress: &dyn Fn(f32),
 ) -> Result<Vec<Segment>, BoxErr> {
+    // whisper.cpp first where we have both halves of it. It is the only backend
+    // that reaches the GPU on this machine, and it ships with the app rather
+    // than being downloaded, so when it is present it is both the fastest
+    // option and the one already on disk.
+    //
+    // Falls through rather than failing if the chosen model has not been
+    // downloaded yet: the older engine can still do the job, slowly, which
+    // beats refusing to start.
+    let whispercpp = crate::download::resolve_program("whisper-cli");
+    if whispercpp.is_file() {
+        if let Some(model_file) = whispercpp_model_path(model) {
+            return transcribe_with_whispercpp(
+                &whispercpp,
+                &model_file,
+                input,
+                model,
+                task,
+                cancel,
+                on_progress,
+            );
+        }
+    }
+
     if let Some(engine) = crate::download::installed_exe(crate::download::ToolId::FasterWhisper) {
         return transcribe_with_standalone(&engine, input, model, task, cancel, on_progress);
     }
@@ -1790,6 +1837,312 @@ fn parse_srt_timestamp(ts: &str) -> Option<f64> {
     ms_str.truncate(3);
     let ms: f64 = ms_str.parse().ok()?;
     Some(h * 3600.0 + m * 60.0 + sec + ms / 1000.0)
+}
+
+// ---------------------------------------------------------------------------
+// whisper.cpp
+// ---------------------------------------------------------------------------
+
+/// Where the GGML file for `model` is, if we have it.
+///
+/// Two places, in order: bundled inside the app for the one model that ships
+/// with it, then the managed directory for anything the user chose to download
+/// afterwards. Same shape as `resolve_program` - bundled first, downloaded
+/// second - so a shipped model can never be shadowed by a half-finished one.
+fn whispercpp_model_path(model: WhisperModel) -> Option<PathBuf> {
+    let file = model.ggml_file();
+
+    if let Some(bundled) = crate::download::bundled_model_dir() {
+        let candidate = bundled.join(file);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    let managed = crate::download::managed_root()?.join("models").join(file);
+    managed.is_file().then_some(managed)
+}
+
+/// whisper.cpp backend. The reason it exists: it reaches the GPU through Metal,
+/// where the standalone engine is an x86-64 build running on the CPU under
+/// Rosetta. Measured on an M1 Max against the same clip, `small` went from 2.2
+/// audio-seconds/s to 17 - and 17 is nearly double what the *tiny* model
+/// managed on the old path, so it buys accuracy and speed at once.
+fn transcribe_with_whispercpp(
+    engine: &Path,
+    model_file: &Path,
+    input: &Path,
+    model: WhisperModel,
+    task: Task,
+    cancel: &AtomicBool,
+    on_progress: &dyn Fn(f32),
+) -> Result<Vec<Segment>, BoxErr> {
+    let work_dir = unique_work_dir("wcpp");
+    std::fs::create_dir_all(&work_dir)?;
+
+    // whisper.cpp reads 16 kHz mono 16-bit WAV and nothing else - it does no
+    // demuxing and no resampling of its own. Every other backend takes whatever
+    // format the source happened to be, so convert here rather than making the
+    // caller care which engine it is talking to.
+    let wav = work_dir.join("audio16k.wav");
+    let convert = no_window_command(crate::download::resolve_program("ffmpeg"))
+        .args(["-hide_banner", "-loglevel", "error", "-y", "-i"])
+        .arg(input)
+        .args(["-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le"])
+        .arg(&wav)
+        .status()
+        .map_err(|e| -> BoxErr { format!("failed to launch ffmpeg: {e}").into() })?;
+    if !convert.success() || !wav.is_file() {
+        let _ = std::fs::remove_dir_all(&work_dir);
+        return Err("could not convert the audio to 16 kHz mono for whisper.cpp".into());
+    }
+
+    if cancel.load(Ordering::Relaxed) {
+        let _ = std::fs::remove_dir_all(&work_dir);
+        return Err("job cancelled".into());
+    }
+
+    let out_stem = work_dir.join("out");
+    let mut cmd = no_window_command(engine);
+    cmd.arg("-m")
+        .arg(model_file)
+        .arg("-f")
+        .arg(&wav)
+        // Auto-detect. whisper.cpp defaults to English rather than detecting,
+        // which would quietly transcribe every other language as gibberish.
+        .args(["-l", "auto"])
+        // The machine has cores the default does not use. Physical cores only:
+        // counting the efficiency ones in slows this down rather than up.
+        .args(["-t", &whispercpp_threads().to_string()])
+        // Token spans, and the DTW pass that makes them worth having. Without
+        // --dtw the tokens carry the decoder's guess rather than an alignment.
+        .arg("-ojf")
+        .args(["-dtw", model.whispercpp_dtw_value()])
+        .arg("-of")
+        .arg(&out_stem);
+    if matches!(task, Task::Translate) {
+        cmd.arg("-tr");
+    }
+
+    let total_seconds = probe_duration_seconds(input).unwrap_or(0.0);
+    let (status, stderr_text) = run_engine_streaming(cmd, total_seconds, cancel, on_progress)
+        .map_err(|e| -> BoxErr { format!("failed to launch whisper.cpp: {e}").into() })?;
+
+    if cancel.load(Ordering::Relaxed) {
+        let _ = std::fs::remove_dir_all(&work_dir);
+        return Err("job cancelled".into());
+    }
+    if !status.success() {
+        let detail = tool_error_detail(&stderr_text, 4);
+        let _ = std::fs::remove_dir_all(&work_dir);
+        return Err(format!("whisper.cpp failed ({status}). {detail}").into());
+    }
+
+    // -of gives a stem; whisper.cpp appends the extension itself.
+    let json_path = out_stem.with_extension("json");
+    let json = std::fs::read_to_string(&json_path).map_err(|e| -> BoxErr {
+        format!(
+            "whisper.cpp wrote no JSON at {}: {e}",
+            json_path.display()
+        )
+        .into()
+    })?;
+    let segments = parse_whispercpp_segments(&json);
+    let _ = std::fs::remove_dir_all(&work_dir);
+    segments
+}
+
+/// Threads to give whisper.cpp: the performance cores, and no more.
+///
+/// The efficiency cores are much slower, and whisper.cpp splits work evenly
+/// rather than by core speed, so including them means every batch waits on the
+/// slowest worker. Falls back to the total when the split is not reported.
+fn whispercpp_threads() -> usize {
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(out) = no_window_command("sysctl")
+            .args(["-n", "hw.perflevel0.logicalcpu"])
+            .output()
+        {
+            if let Ok(n) = String::from_utf8_lossy(&out.stdout).trim().parse::<usize>() {
+                if n > 0 {
+                    return n;
+                }
+            }
+        }
+    }
+    std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4)
+}
+
+/// whisper.cpp's `--output-json-full` shape, as far as we care about it.
+///
+/// Nothing like the other two backends: the timings are integer milliseconds
+/// rather than float seconds, they live under `offsets`, and the sub-segment
+/// unit is a *token* rather than a word. Hence its own structs and its own
+/// parser rather than a widened `WhisperJson`.
+#[derive(serde::Deserialize)]
+struct WhisperCppJson {
+    #[serde(default)]
+    transcription: Vec<WhisperCppSegment>,
+}
+
+#[derive(serde::Deserialize)]
+struct WhisperCppSegment {
+    offsets: WhisperCppOffsets,
+    #[serde(default)]
+    text: String,
+    /// Only present with `--output-json-full`, and only carries useful timings
+    /// with `--dtw`. Absent is not an error: the splitter falls back to cutting
+    /// on silence when a segment has no words.
+    #[serde(default)]
+    tokens: Vec<WhisperCppToken>,
+}
+
+#[derive(serde::Deserialize)]
+struct WhisperCppOffsets {
+    from: i64,
+    to: i64,
+}
+
+#[derive(serde::Deserialize)]
+struct WhisperCppToken {
+    #[serde(default)]
+    text: String,
+    offsets: WhisperCppOffsets,
+}
+
+/// Rebuild whole words out of whisper.cpp's tokens.
+///
+/// The model emits sub-word pieces - "cru", "z", "adas" - so a token is not a
+/// word. What marks a word boundary is a *leading space* on the token text,
+/// which is how the tokenizer encodes "a new word starts here". So: start a new
+/// word on a token that begins with a space, otherwise glue this token onto the
+/// one being built.
+///
+/// Special tokens (`[_BEG_]`, `[_TT_180]`) are markers, not speech. They carry
+/// no useful span and would otherwise show up as literal text in a subtitle.
+fn words_from_tokens(tokens: &[WhisperCppToken]) -> Vec<Word> {
+    let mut words: Vec<Word> = Vec::new();
+
+    for tok in tokens {
+        if tok.text.starts_with('[') && tok.text.ends_with(']') {
+            continue;
+        }
+        let start = tok.offsets.from as f64 / 1000.0;
+        let end = tok.offsets.to as f64 / 1000.0;
+
+        match words.last_mut() {
+            // Continuation of the word in progress: extend its span and text.
+            Some(w) if !tok.text.starts_with(' ') => {
+                w.text.push_str(&tok.text);
+                w.end = w.end.max(end);
+            }
+            _ => words.push(Word {
+                start,
+                end,
+                text: tok.text.trim_start().to_string(),
+            }),
+        }
+    }
+
+    // A token whose span the model never pinned down comes back as zero width.
+    // Dropping empties keeps those out of the word gaps the splitter measures.
+    words.retain(|w| !w.text.trim().is_empty());
+    words
+}
+
+/// Parse `--output-json-full` into the segments the rest of the pipeline wants.
+fn parse_whispercpp_segments(json: &str) -> Result<Vec<Segment>, BoxErr> {
+    let parsed: WhisperCppJson = serde_json::from_str(json)
+        .map_err(|e| -> BoxErr { format!("failed to parse whisper.cpp JSON: {e}").into() })?;
+
+    Ok(parsed
+        .transcription
+        .into_iter()
+        .map(|s| Segment {
+            start: s.offsets.from as f64 / 1000.0,
+            end: s.offsets.to as f64 / 1000.0,
+            text: s.text.trim().to_string(),
+            words: words_from_tokens(&s.tokens),
+            translation: None,
+        })
+        .filter(|s| !s.text.is_empty())
+        .collect())
+}
+
+#[cfg(test)]
+mod whispercpp_json_tests {
+    use super::*;
+
+    /// Trimmed from a real `--output-json-full --dtw small` run, keeping the
+    /// awkward parts: a `[_BEG_]` marker, and "cruzadas" arriving as three
+    /// separate pieces.
+    const SAMPLE: &str = r#"{
+      "transcription": [
+        {
+          "offsets": { "from": 0, "to": 6340 },
+          "text": " las cruzadas fueron",
+          "tokens": [
+            { "text": "[_BEG_]", "offsets": { "from": 0, "to": 0 } },
+            { "text": " las",     "offsets": { "from": 0,   "to": 140 } },
+            { "text": " cru",     "offsets": { "from": 190, "to": 320 } },
+            { "text": "z",        "offsets": { "from": 320, "to": 320 } },
+            { "text": "adas",     "offsets": { "from": 410, "to": 590 } },
+            { "text": " fueron",  "offsets": { "from": 590, "to": 920 } }
+          ]
+        }
+      ]
+    }"#;
+
+    #[test]
+    fn milliseconds_become_seconds() {
+        let segs = parse_whispercpp_segments(SAMPLE).unwrap();
+        assert_eq!(segs.len(), 1);
+        assert_eq!(segs[0].start, 0.0);
+        assert_eq!(segs[0].end, 6.34);
+    }
+
+    #[test]
+    fn sub_word_tokens_are_glued_back_into_words() {
+        let segs = parse_whispercpp_segments(SAMPLE).unwrap();
+        let words: Vec<&str> = segs[0].words.iter().map(|w| w.text.as_str()).collect();
+        assert_eq!(words, ["las", "cruzadas", "fueron"]);
+    }
+
+    #[test]
+    fn a_glued_word_spans_all_of_its_pieces() {
+        let segs = parse_whispercpp_segments(SAMPLE).unwrap();
+        let cruzadas = &segs[0].words[1];
+        assert_eq!(cruzadas.start, 0.19);
+        assert_eq!(cruzadas.end, 0.59);
+    }
+
+    #[test]
+    fn marker_tokens_never_reach_the_transcript() {
+        let segs = parse_whispercpp_segments(SAMPLE).unwrap();
+        assert!(!segs[0].words.iter().any(|w| w.text.contains("_BEG_")));
+    }
+
+    #[test]
+    fn a_segment_without_tokens_still_parses() {
+        let json = r#"{"transcription":[{"offsets":{"from":500,"to":1500},"text":"hola"}]}"#;
+        let segs = parse_whispercpp_segments(json).unwrap();
+        assert_eq!(segs[0].text, "hola");
+        assert!(segs[0].words.is_empty(), "no words is valid, not an error");
+    }
+
+    #[test]
+    fn empty_transcription_is_not_an_error() {
+        assert!(parse_whispercpp_segments(r#"{"transcription":[]}"#)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn malformed_json_is_an_error() {
+        assert!(parse_whispercpp_segments("not json").is_err());
+    }
 }
 
 /// Whisper's JSON, as far as we care about it. Both backends emit this shape:

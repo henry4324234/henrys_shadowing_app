@@ -268,6 +268,26 @@ pub fn bundled_bin_dir() -> Option<PathBuf> {
     Some(dir.join("bin"))
 }
 
+/// Where the transcription model that ships *inside* the app lives.
+///
+/// Only the smallest model rides along - it is 74 MB, which an installer can
+/// carry without becoming a nuisance, and it means a fresh install can
+/// transcribe something the moment it opens, with nothing to download first.
+/// Larger models are fetched on demand into `managed_root()/models`.
+pub fn bundled_model_dir() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let dir = exe.parent()?;
+
+    #[cfg(target_os = "macos")]
+    {
+        if dir.ends_with("Contents/MacOS") {
+            return Some(dir.parent()?.join("Resources").join("models"));
+        }
+    }
+
+    Some(dir.join("models"))
+}
+
 fn tool_dir(spec: &ToolSpec) -> Option<PathBuf> {
     let dir_name = match spec.id {
         ToolId::Ffmpeg => format!("ffmpeg-{}", spec.version),
