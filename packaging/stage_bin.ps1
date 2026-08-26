@@ -47,8 +47,22 @@ $WorkDir   = Join-Path $CacheDir 'extract'
 # Read the pinned versions out of src/download.rs
 # ---------------------------------------------------------------------------
 
+# The body of one platform's MANIFEST. There is a list per target_os now, each
+# behind its own #[cfg(...)], and they use the same ToolIds - so a parser that
+# reads the whole file gets the last one to mention each tool. Which is how this
+# script once downloaded ffmpeg-darwin-arm64 and tried to unzip it on Windows.
+function Get-ManifestBody([string]$Source, [string]$Os) {
+    $pattern = '(?s)#\[cfg\((?<cfg>[^\]]*)\)\]\s*\r?\npub const MANIFEST[^=]*=\s*&\[(?<body>.*?)\r?\n\];'
+    foreach ($m in [regex]::Matches($Source, $pattern)) {
+        if ($m.Groups['cfg'].Value -match ('target_os = "{0}"' -f $Os)) {
+            return $m.Groups['body'].Value
+        }
+    }
+    throw "no MANIFEST for target_os = ""$Os"" in src\download.rs"
+}
+
 function Get-Manifest {
-    $source = Get-Content -Raw (Join-Path $RepoRoot 'src\download.rs')
+    $source = Get-ManifestBody (Get-Content -Raw (Join-Path $RepoRoot 'src\download.rs')) 'windows'
     $specs = @{}
 
     foreach ($m in [regex]::Matches($source, '(?s)ToolSpec\s*\{(.*?)\r?\n\s*\},')) {

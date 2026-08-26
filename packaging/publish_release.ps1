@@ -94,8 +94,17 @@ try {
 }
 
 # Pin versions straight out of the manifest, so the notes always describe what
-# actually shipped rather than what someone remembered to type.
+# actually shipped rather than what someone remembered to type. Only the Windows
+# list: src\download.rs carries one MANIFEST per target_os now, and this script
+# publishes the Windows installer.
 $downloadRs = Get-Content -Raw (Join-Path $RepoRoot 'src\download.rs')
+$windowsManifest = '(?s)#\[cfg\((?<cfg>[^\]]*)\)\]\s*\r?\npub const MANIFEST[^=]*=\s*&\[(?<body>.*?)\r?\n\];'
+$downloadRs = ([regex]::Matches($downloadRs, $windowsManifest) |
+    Where-Object { $_.Groups['cfg'].Value -match 'target_os = "windows"' } |
+    ForEach-Object { $_.Groups['body'].Value } |
+    Select-Object -First 1)
+if (-not $downloadRs) { throw 'no Windows MANIFEST found in src\download.rs' }
+
 $bundled = New-Object System.Collections.Generic.List[string]
 foreach ($m in [regex]::Matches($downloadRs, '(?s)ToolSpec\s*\{(.*?)\r?\n\s*\},')) {
     $block = $m.Groups[1].Value
