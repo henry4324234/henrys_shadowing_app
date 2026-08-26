@@ -445,11 +445,24 @@ pub fn run_pipeline(
         let mut samples = decode_audio_to_samples(&audio_path)?;
 
         // Trim to max duration if requested.
+        //
+        // The transcript is *not* trimmed by this: transcription ran against
+        // the whole file, above, so it still describes audio that no longer
+        // exists. Left alone, a segment straddling the cut keeps word times
+        // past the end of the buffer, the splitter picks a cut from them, and
+        // the slice that follows starts after it ends - which panics the job
+        // thread and leaves the UI sitting on a percentage forever.
+        //
+        // So bring the segments down to the audio we kept: drop the ones that
+        // start past the end, and clamp the one that straddles it, words and
+        // all.
         if let Some(max_secs) = max_duration_seconds {
             let max_samples = (max_secs * SAMPLE_RATE as f64) as usize;
             if samples.len() > max_samples {
                 samples.truncate(max_samples);
             }
+            let limit = samples.len() as f64 / SAMPLE_RATE as f64;
+            clamp_segments_to(&mut segments, limit);
         }
 
         let output_path = output_dir.join(format!("{stem}.mp4"));
@@ -2086,6 +2099,66 @@ fn parse_whispercpp_segments(json: &str) -> Result<Vec<Segment>, BoxErr> {
 }
 
 #[cfg(test)]
+mod duration_cap_tests {
+    use super::*;
+
+    fn seg(start: f64, end: f64, words: &[(f64, f64)]) -> Segment {
+        Segment {
+            start,
+            end,
+            text: "x".into(),
+            words: words
+                .iter()
+                .map(|(s, e)| Word {
+                    start: *s,
+                    end: *e,
+                    text: "w".into(),
+                })
+                .collect(),
+            translation: None,
+        }
+    }
+
+    #[test]
+    fn segments_past_the_limit_are_dropped() {
+        let mut segs = vec![seg(0.0, 5.0, &[]), seg(301.0, 306.0, &[])];
+        clamp_segments_to(&mut segs, 300.0);
+        assert_eq!(segs.len(), 1);
+    }
+
+    /// The shape that actually broke a job: a segment straddling the 5-minute
+    /// cap, with words running well past it.
+    #[test]
+    fn a_straddling_segment_is_clamped_words_and_all() {
+        let mut segs = vec![seg(297.3, 307.0, &[(297.3, 298.0), (305.9, 306.97)])];
+        clamp_segments_to(&mut segs, 300.0);
+        assert_eq!(segs[0].end, 300.0);
+        assert!(
+            segs[0].words.iter().all(|w| w.end <= 300.0),
+            "no word may point past the audio that was kept"
+        );
+    }
+
+    #[test]
+    fn an_inverted_cut_pair_is_skipped_not_panicked() {
+        let samples = vec![0i16; 1000];
+        let s = seg(0.0, 1.0, &[]);
+        // start after end - exactly what the split log recorded before the
+        // job thread died.
+        let chunks = cut_times_to_chunks(&samples, &s, &[100, 900, 500]);
+        assert_eq!(chunks.len(), 1, "the good pair survives, the bad one goes");
+    }
+
+    #[test]
+    fn cuts_past_the_buffer_are_clamped_not_panicked() {
+        let samples = vec![0i16; 1000];
+        let s = seg(0.0, 1.0, &[]);
+        let chunks = cut_times_to_chunks(&samples, &s, &[0, 5000]);
+        assert_eq!(chunks[0].audio.len(), 1000);
+    }
+}
+
+#[cfg(test)]
 mod whispercpp_json_tests {
     use super::*;
 
@@ -2843,6 +2916,24 @@ fn find_splits(seg: &Segment, max_chunk_seconds: f64) -> Vec<f64> {
     splits
 }
 
+/// Cut every segment down to `limit` seconds of audio, and throw away the ones
+/// that start beyond it.
+///
+/// Used when "only process the first N minutes" is on. The words are clamped
+/// too, not just the segment span: the splitter picks its cuts from word times,
+/// so a word left pointing past the end is the thing that actually does the
+/// damage.
+fn clamp_segments_to(segments: &mut Vec<Segment>, limit: f64) {
+    segments.retain(|s| s.start < limit);
+    for seg in segments.iter_mut() {
+        seg.end = seg.end.min(limit);
+        seg.words.retain(|w| w.start < limit);
+        for word in seg.words.iter_mut() {
+            word.end = word.end.min(limit);
+        }
+    }
+}
+
 fn cut_times_to_chunks<'a>(
     samples: &'a [i16],
     seg: &Segment,
@@ -2851,8 +2942,17 @@ fn cut_times_to_chunks<'a>(
     let mut chunks = Vec::new();
 
     for pair in cut_times.windows(2) {
-        let start = pair[0];
-        let end = pair[1];
+        // Clamp rather than index blindly. Everything upstream is meant to
+        // hand over an ordered, in-bounds list, but "meant to" was doing the
+        // work here: one inverted pair - start after end - panicked the whole
+        // job thread, and a panicked worker shows up as a progress bar that
+        // never moves rather than as an error anyone can act on. A bad cut
+        // list should cost a chunk, not the job.
+        let start = pair[0].min(samples.len());
+        let end = pair[1].min(samples.len());
+        if start >= end {
+            continue;
+        }
 
         chunks.push(Chunk {
             audio: &samples[start..end],
