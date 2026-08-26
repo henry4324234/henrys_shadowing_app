@@ -43,8 +43,10 @@
 
   .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 20px; }
   /* The hero alone runs wider than the prose: it has to hold a screenshot of a
-     desktop app beside the buttons, and 860px would squeeze both. */
-  .wrap.wide { max-width: 1180px; }
+     desktop app beside the buttons, and 860px would squeeze both. Wide enough
+     that the title sits on one line and a caption fits beside its button
+     without wrapping — below about 1300px both start breaking up. */
+  .wrap.wide { max-width: 1360px; }
 
   /* ---------------------------------------------------------------- hero */
 
@@ -64,18 +66,30 @@
   /* Side by side once there is room for both columns to breathe. Below this
      the screenshot drops underneath and everything re-centres. */
   @media (min-width: 980px) {
+    /* Grid rather than flex so the two columns keep a fixed ratio instead of
+       the copy shrinking to whatever the screenshot leaves. The copy side gets
+       enough room for the title on one line; the shot takes the rest. */
     header.hero {
-      display: flex;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
       align-items: center;
-      gap: 48px;
+      gap: 56px;
       text-align: left;
       padding: 64px 0 60px;
     }
-    .hero-copy { flex: 0 1 420px; }
-    .hero-copy .tagline { margin-left: 0; margin-right: 0; }
+    /* A touch wider than the centred version: left-aligned against a
+       screenshot, 34ch broke this into three short ragged lines. */
+    .hero-copy .tagline { margin-left: 0; margin-right: 0; max-width: 40ch; }
     .hero-copy .downloads { justify-content: flex-start; }
-    .hero-copy .release-meta { text-align: left; }
-    .hero-shot { flex: 1 1 0; min-width: 0; margin: 0; max-width: none; }
+    /* Flush the caption with the left edge of its own button. Centred, a
+       caption wider than its button hangs off to the left of it and reads as
+       a misalignment. */
+    .hero-copy .downloads > div { align-items: flex-start; }
+    /* No width cap here: the column is wide enough for the whole caption on
+       one line, and capping it only forced a break that left a separator
+       dangling at the end of the first line. */
+    .hero-copy .release-meta { text-align: left; max-width: none; }
+    .hero-shot { margin: 0; max-width: none; }
   }
 
   .hero img.logo {
