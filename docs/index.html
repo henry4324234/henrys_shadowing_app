@@ -358,7 +358,9 @@
     </div>
 
     <div class="note">
-      <p><strong>On a Mac, open it the first time with right-click &rsaquo; Open &mdash; before you try it any other way.</strong> Drag the app out of the disk image into Applications, then right-click it and choose <em>Open</em>. The app is signed, but not notarised by Apple, so Gatekeeper will not vouch for it: double-clicking a freshly downloaded copy does not give you the permission prompt, and macOS may run it from a temporary read-only copy rather than the one you installed. Going through <em>Open</em> once gives you a button to allow it, and from then on it launches normally from Applications. The Mac build is for Apple Silicon, and transcribes on the CPU.</p>
+      <p><strong>On a Mac, macOS blocks it the first time. That is expected, and it takes about ten seconds to get past.</strong> Drag the app out of the disk image into Applications and open it. You will get a box saying Apple could not verify the app &mdash; that is because it is not notarised, which needs a paid Apple developer account, not because anything is wrong with it.</p>
+      <p><strong>Click <em>Done</em> &mdash; never <em>Move to Bin</em>, which deletes the app.</strong> Then go to <strong>System Settings &rsaquo; Privacy &amp; Security</strong>, scroll down to the message about Henry&rsquo;s Shadowing App, and click <strong>Open Anyway</strong>. After that it opens normally, every time.</p>
+      <p>On older versions of macOS, right-click &rsaquo; <em>Open</em> did this in one step. Apple removed that, so on a current Mac the Privacy &amp; Security route above is the one that works. The Mac build is for Apple Silicon.</p>
     </div>
   </section>
 
