@@ -8,18 +8,56 @@ const SAMPLE_RATE: u32 = 44_100;
 
 pub type BoxErr = Box<dyn Error + Send + Sync>;
 
-/// Build a `Command` that won't pop up a console window on Windows. On other
-/// platforms this is just `Command::new`. Used for every external tool
-/// (ffmpeg, yt-dlp, demucs, whisperx, python) so a release GUI build doesn't
-/// flash terminal windows when spawning subprocesses.
+/// A writable directory for spawned tools to stand in.
+///
+/// A child inherits our working directory, and a GUI app launched the way
+/// users launch one — Finder, the Dock, `open` — is given `/`. Any tool that
+/// then creates something by a *relative* path is writing to the read-only
+/// system volume. The transcription engines do exactly that: both resolve
+/// their model-download cache relative to the cwd, so on a normal launch the
+/// first fetch of any model died with
+///
+/// ```text
+/// OSError: [Errno 30] Read-only file system: '//.cache'
+/// ```
+///
+/// which surfaced as "transcription engine failed (exit code 1)". It only bit
+/// when a model still had to be downloaded, so it looked intermittent — but
+/// for a new install every model is uncached, which made it the first thing a
+/// user hit.
+///
+/// Under `managed_root` rather than a temp dir on purpose: that cache is worth
+/// keeping. Somewhere that gets cleaned between jobs would re-download the
+/// model every run, which is 484 MB for `small`.
+fn tool_working_dir() -> Option<&'static Path> {
+    static DIR: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        let dir = crate::download::managed_root()?.join("cache");
+        std::fs::create_dir_all(&dir).ok()?;
+        Some(dir)
+    })
+    .as_deref()
+}
+
+/// Build a `Command` that won't pop up a console window on Windows, and that
+/// runs somewhere it is allowed to write. On non-Windows the first part is
+/// just `Command::new`; the working directory matters everywhere.
+///
+/// Used for every external tool (ffmpeg, yt-dlp, demucs, whisperx, python), so
+/// a release GUI build neither flashes terminal windows nor inherits a working
+/// directory it cannot write to. See [`tool_working_dir`].
 pub fn no_window_command<S: AsRef<std::ffi::OsStr>>(program: S) -> Command {
-    #[allow(unused_mut)]
     let mut cmd = Command::new(program);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         // CREATE_NO_WINDOW = 0x08000000
         cmd.creation_flags(0x0800_0000);
+    }
+    // Every path we hand these tools is absolute, so this only changes where
+    // relative paths they invent themselves land.
+    if let Some(dir) = tool_working_dir() {
+        cmd.current_dir(dir);
     }
     cmd
 }
