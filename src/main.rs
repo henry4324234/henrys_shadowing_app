@@ -2550,8 +2550,13 @@ fn main() -> eframe::Result<()> {
         viewport: egui::ViewportBuilder::default()
             // Window scaled up by UI_SCALE too, so the larger UI has the same
             // amount of room as before rather than getting cramped.
-            .with_inner_size([820.0 * UI_SCALE, 600.0 * UI_SCALE])
-            .with_min_inner_size([560.0 * UI_SCALE, 420.0 * UI_SCALE])
+            // 870 rather than 820: the settings rows are laid out horizontally
+            // and the last of them — Theme — was being clipped off the right
+            // edge once the cards got their roomier padding. Widening beats
+            // tightening the padding back up, which is the thing that made the
+            // window look cramped in the first place.
+            .with_inner_size([870.0 * UI_SCALE, 600.0 * UI_SCALE])
+            .with_min_inner_size([600.0 * UI_SCALE, 420.0 * UI_SCALE])
             // No OS title bar — the app draws its own themed one (see
             // `title_bar` in App::update), which handles dragging and the
             // minimize/maximize/close buttons itself. The title string and

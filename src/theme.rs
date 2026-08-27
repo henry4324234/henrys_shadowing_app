@@ -444,8 +444,8 @@ pub fn apply(ctx: &egui::Context) {
 
     // Airier spacing than the default: room around controls is most of what
     // separates "engineer UI" from something that feels designed.
-    style.spacing.item_spacing = egui::vec2(8.0, 8.0);
-    style.spacing.button_padding = egui::vec2(12.0, 5.0);
+    style.spacing.item_spacing = egui::vec2(10.0, 9.0);
+    style.spacing.button_padding = egui::vec2(14.0, 7.0);
     style.spacing.interact_size.y = 24.0;
     style.spacing.icon_width = 16.0;
     style.spacing.icon_width_inner = 9.0;
@@ -468,7 +468,7 @@ pub fn apply(ctx: &egui::Context) {
     v.panel_fill = p.bg;
     v.window_fill = p.card;
     v.window_stroke = Stroke::new(1.0, p.card_stroke);
-    v.window_corner_radius = CornerRadius::same(16);
+    v.window_corner_radius = CornerRadius::same(18);
     v.window_shadow = Shadow {
         offset: [0, 8],
         blur: 32,
@@ -481,7 +481,7 @@ pub fn apply(ctx: &egui::Context) {
         spread: 0,
         color: Color32::from_black_alpha(shadow_alpha),
     };
-    v.menu_corner_radius = CornerRadius::same(12);
+    v.menu_corner_radius = CornerRadius::same(14);
     v.extreme_bg_color = p.field;
     v.code_bg_color = p.field;
     v.faint_bg_color = p.widget;
@@ -490,21 +490,21 @@ pub fn apply(ctx: &egui::Context) {
     v.widgets.noninteractive.fg_stroke = Stroke::new(1.0, p.text);
     v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, p.card_stroke);
     v.widgets.noninteractive.bg_fill = p.card;
-    v.widgets.noninteractive.corner_radius = CornerRadius::same(10);
+    v.widgets.noninteractive.corner_radius = CornerRadius::same(12);
 
     // Idle widgets.
     v.widgets.inactive.bg_fill = p.widget;
     v.widgets.inactive.weak_bg_fill = p.widget;
     v.widgets.inactive.bg_stroke = Stroke::new(1.0, p.widget_stroke);
     v.widgets.inactive.fg_stroke = Stroke::new(1.0, p.text);
-    v.widgets.inactive.corner_radius = CornerRadius::same(10);
+    v.widgets.inactive.corner_radius = CornerRadius::same(12);
 
     // Hovered.
     v.widgets.hovered.bg_fill = p.widget_hover;
     v.widgets.hovered.weak_bg_fill = p.widget_hover;
     v.widgets.hovered.bg_stroke = Stroke::new(1.0, p.widget_active);
     v.widgets.hovered.fg_stroke = Stroke::new(1.0, p.text_strong);
-    v.widgets.hovered.corner_radius = CornerRadius::same(10);
+    v.widgets.hovered.corner_radius = CornerRadius::same(12);
 
     // Pressed / dragged. Its fg color doubles as `strong_text_color()`,
     // which is what `RichText::strong()` renders with.
@@ -512,14 +512,14 @@ pub fn apply(ctx: &egui::Context) {
     v.widgets.active.weak_bg_fill = p.widget_active;
     v.widgets.active.bg_stroke = Stroke::new(1.0, p.widget_active);
     v.widgets.active.fg_stroke = Stroke::new(1.0, p.text_strong);
-    v.widgets.active.corner_radius = CornerRadius::same(10);
+    v.widgets.active.corner_radius = CornerRadius::same(12);
 
     // Open (a combo box showing its popup).
     v.widgets.open.bg_fill = p.widget_hover;
     v.widgets.open.weak_bg_fill = p.widget_hover;
     v.widgets.open.bg_stroke = Stroke::new(1.0, p.widget_active);
     v.widgets.open.fg_stroke = Stroke::new(1.0, p.text_strong);
-    v.widgets.open.corner_radius = CornerRadius::same(10);
+    v.widgets.open.corner_radius = CornerRadius::same(12);
 
     // Selection: text selection, focused-field outline, combo highlight.
     v.selection.bg_fill = with_alpha(p.accent, 70);
@@ -545,8 +545,8 @@ pub fn card() -> egui::Frame {
     egui::Frame::new()
         .fill(p.card)
         .stroke(Stroke::new(1.0, p.card_stroke))
-        .corner_radius(CornerRadius::same(14))
-        .inner_margin(Margin::symmetric(12, 10))
+        .corner_radius(CornerRadius::same(18))
+        .inner_margin(Margin::symmetric(16, 14))
 }
 
 /// Small uppercase section header inside a card.
@@ -559,7 +559,7 @@ pub fn chip(ui: &mut egui::Ui, text: &str, color: Color32) -> egui::Response {
     egui::Frame::new()
         .fill(with_alpha(color, 26))
         .corner_radius(CornerRadius::same(255))
-        .inner_margin(Margin::symmetric(8, 3))
+        .inner_margin(Margin::symmetric(10, 4))
         .show(ui, |ui| {
             ui.label(egui::RichText::new(text).small().color(color));
         })
