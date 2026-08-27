@@ -893,7 +893,12 @@ impl App {
                 });
             });
 
-        if recheck && deps::check_demucs().is_ok() {
+        // "I've installed it now" — probe again off-thread and take the user at
+        // their word in the meantime. If they are wrong, the rule by the
+        // checkbox unticks it and reopens this window when the answer lands,
+        // so there is nothing to undo here.
+        if recheck {
+            deps::refresh_demucs();
             self.strip_music = true;
             close = true;
         }
@@ -1559,18 +1564,29 @@ impl eframe::App for App {
 
                     ui.add_space(8.0);
 
-                    let strip_music = ui
-                        .checkbox(&mut self.strip_music, "Strip music")
+                    ui.checkbox(&mut self.strip_music, "Strip music")
                         .on_hover_text(
                             "Use Demucs to isolate vocals before transcribing. \
                              Slow on CPU, fast on GPU.",
                         );
 
-                    // Switching this on without Demucs would only fail later, mid-job,
-                    // so verify now and refuse, opening the explainer window. Checked
-                    // on the way on but not off — probing imports torch and takes a
-                    // moment.
-                    if strip_music.changed() && self.strip_music && !deps::check_demucs().is_ok() {
+                    // Switching this on without Demucs would only fail later,
+                    // mid-job, so refuse it and open the explainer instead.
+                    //
+                    // One rule, checked every frame rather than only when the
+                    // box is clicked, because the answer no longer arrives
+                    // instantly: the probe runs on a helper thread, so it can
+                    // land after the tick. This same line therefore covers the
+                    // tick itself, a setting restored at startup, and a result
+                    // that turns up late — and it costs an atomic load.
+                    //
+                    // While the answer is still unknown the box is left alone.
+                    // Guessing either way would be worse: refuse and we block
+                    // someone who does have it, accept silently and they find
+                    // out mid-job.
+                    if self.strip_music
+                        && matches!(deps::demucs_status(), Some(deps::DependencyStatus::NotFound))
+                    {
                         self.strip_music = false;
                         self.demucs_window_open = true;
                     }
@@ -2261,7 +2277,11 @@ impl Settings {
         // Honour a saved "on" only if Demucs is still installed — it may have
         // been removed since. Same rule as the checkbox, so the setting can
         // never come back enabled without the tool behind it.
-        app.strip_music = self.strip_music && deps::check_demucs().is_ok();
+        // Restored as saved. This used to verify demucs here, which meant every
+        // launch paid for a torch import before the window appeared. The
+        // check now happens on a helper thread and the rule by the checkbox
+        // turns this back off if the tool has gone missing since.
+        app.strip_music = self.strip_music;
         app.repeat_count = self.repeat_count.clamp(1, 10);
         app.gap_ratio = self.gap_ratio.clamp(0.0, 10.0);
         app.max_chunk_seconds = self.max_chunk_seconds.clamp(2.0, 60.0);
@@ -2615,6 +2635,12 @@ fn main() -> eframe::Result<()> {
             // title bar: rounded corners, drop shadow, and a themed border.
             #[cfg(target_os = "windows")]
             win_chrome::init(cc, theme::palette().card_stroke);
+
+            // Find out about demucs now, on a helper thread, so that ticking
+            // "Strip music" is instant. Answering that question means importing
+            // torch, which is seconds of work — it used to happen on the UI
+            // thread at the click, and froze the window while it ran.
+            deps::refresh_demucs();
 
             Ok(Box::new(app) as Box<dyn eframe::App>)
         }),

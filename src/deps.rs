@@ -4,7 +4,7 @@
 //! here — ffmpeg/deno/yt-dlp are shipped in the installer's `bin\` dir and
 //! resolved at spawn time rather than surfaced to the user.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 use crate::pipeline::no_window_command;
 
@@ -64,9 +64,63 @@ pub const DEMUCS_INSTALL_HINT: &str =
 
 /// Demucs: an optional Python model that separates a track into vocals and
 /// instruments. "Strip music" runs it first so backing music doesn't confuse
-/// the transcription. Probed when the user ticks that box.
+/// the transcription.
+///
+/// Blocking, and slower than it looks: finding it means importing the module,
+/// which pulls in torch and can take seconds on a cold cache. Call
+/// [`refresh_demucs`] instead from anywhere the UI thread can reach.
 pub fn check_demucs() -> DependencyStatus {
     check_python_module("demucs", "demucs")
+}
+
+// ---------------------------------------------------------------------------
+// Demucs, off the UI thread
+// ---------------------------------------------------------------------------
+
+const DEMUCS_UNKNOWN: u8 = 0;
+const DEMUCS_FOUND: u8 = 1;
+const DEMUCS_MISSING: u8 = 2;
+
+/// Last known answer from [`check_demucs`], so the render loop never has to ask.
+static DEMUCS: AtomicU8 = AtomicU8::new(DEMUCS_UNKNOWN);
+/// Whether a probe is in flight, so repeated clicks don't pile up threads.
+static DEMUCS_PROBING: AtomicBool = AtomicBool::new(false);
+
+/// What we currently believe about demucs, or `None` if we have not found out
+/// yet.
+///
+/// Cheap enough to call every frame - one atomic load.
+pub fn demucs_status() -> Option<DependencyStatus> {
+    match DEMUCS.load(Ordering::Relaxed) {
+        DEMUCS_FOUND => Some(DependencyStatus::Found),
+        DEMUCS_MISSING => Some(DependencyStatus::NotFound),
+        _ => None,
+    }
+}
+
+/// Probe for demucs on a helper thread, updating [`demucs_status`] when it
+/// lands.
+///
+/// Started once at launch so the answer is usually there before anyone asks,
+/// and again whenever the user says they have installed it. Does nothing if a
+/// probe is already running: the button is clickable repeatedly and the work is
+/// heavy enough that stacking it up would be its own problem.
+pub fn refresh_demucs() {
+    if DEMUCS_PROBING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    std::thread::spawn(|| {
+        let status = check_demucs();
+        DEMUCS.store(
+            if status.is_ok() {
+                DEMUCS_FOUND
+            } else {
+                DEMUCS_MISSING
+            },
+            Ordering::Relaxed,
+        );
+        DEMUCS_PROBING.store(false, Ordering::SeqCst);
+    });
 }
 
 /// Transcription, the one hard requirement: it turns the audio into the
