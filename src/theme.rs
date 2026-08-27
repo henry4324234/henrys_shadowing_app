@@ -537,6 +537,43 @@ pub fn with_alpha(color: Color32, alpha: u8) -> Color32 {
     Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), alpha)
 }
 
+/// How round the window itself is. Only meaningful where we draw the corners
+/// ourselves — see [`window_fill`].
+pub const WINDOW_RADIUS: u8 = 12;
+
+/// What the full-bleed panels (titlebar, central, actions) should be filled
+/// with.
+///
+/// Opaque background everywhere except macOS. The window is frameless on every
+/// platform, and each OS drops the rounded corners along with the title bar.
+/// Windows hands them back through DWM, so its panels can stay opaque. macOS
+/// has no equivalent call, so the corners have to be painted — which only
+/// works if the panels covering them are transparent and something rounded is
+/// drawn underneath. See `paint_window_background`.
+pub fn window_fill() -> Color32 {
+    if cfg!(target_os = "macos") {
+        Color32::TRANSPARENT
+    } else {
+        palette().bg
+    }
+}
+
+/// Paint the window's own background, rounded, beneath everything else.
+///
+/// A no-op away from macOS, where the panels are opaque and the OS rounds the
+/// window for us.
+pub fn paint_window_background(ctx: &egui::Context) {
+    if !cfg!(target_os = "macos") {
+        return;
+    }
+    let rect = ctx.screen_rect();
+    ctx.layer_painter(egui::LayerId::background()).rect_filled(
+        rect,
+        CornerRadius::same(WINDOW_RADIUS),
+        palette().bg,
+    );
+}
+
 // ---------- Building blocks ----------
 
 /// A raised card: the panel sections and each queue row live in one.

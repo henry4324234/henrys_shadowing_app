@@ -1153,7 +1153,29 @@ impl eframe::App for App {
         save_settings(self);
     }
 
+    /// Clear to nothing on macOS, so the area outside the rounded corners stays
+    /// see-through rather than being wiped to an opaque colour that squares the
+    /// window back off. Elsewhere the OS owns the corners and this is the
+    /// ordinary background.
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        if cfg!(target_os = "macos") {
+            [0.0, 0.0, 0.0, 0.0]
+        } else {
+            let bg = theme::palette().bg;
+            [
+                bg.r() as f32 / 255.0,
+                bg.g() as f32 / 255.0,
+                bg.b() as f32 / 255.0,
+                1.0,
+            ]
+        }
+    }
+
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Before any panel: the window's own rounded background. The panels
+        // are transparent on macOS so this is what actually shows.
+        theme::paint_window_background(ctx);
+
         while let Ok(msg) = self.rx.try_recv() {
             match msg {
                 JobMsg::Stage(id, generation, stage, frac) => {
@@ -1343,7 +1365,7 @@ impl eframe::App for App {
             .exact_height(34.0)
             .frame(
                 egui::Frame::new()
-                    .fill(theme::palette().bg)
+                    .fill(theme::window_fill())
                     .inner_margin(egui::Margin::symmetric(10, 0)),
             )
             .show(ctx, |ui| {
@@ -1393,7 +1415,7 @@ impl eframe::App for App {
         egui::TopBottomPanel::top("top")
             .frame(
                 egui::Frame::new()
-                    .fill(theme::palette().bg)
+                    .fill(theme::window_fill())
                     .inner_margin(egui::Margin::symmetric(14, 12)),
             )
             .show(ctx, |ui| {
@@ -1788,7 +1810,7 @@ impl eframe::App for App {
         egui::TopBottomPanel::bottom("actions")
             .frame(
                 egui::Frame::new()
-                    .fill(theme::palette().bg)
+                    .fill(theme::window_fill())
                     .inner_margin(egui::Margin::symmetric(14, 10)),
             )
             .show(ctx, |ui| {
@@ -1854,7 +1876,7 @@ impl eframe::App for App {
         egui::CentralPanel::default()
             .frame(
                 egui::Frame::new()
-                    .fill(theme::palette().bg)
+                    .fill(theme::window_fill())
                     .inner_margin(egui::Margin::symmetric(14, 4)),
             )
             .show(ctx, |ui| {
@@ -2562,6 +2584,10 @@ fn main() -> eframe::Result<()> {
             // minimize/maximize/close buttons itself. The title string and
             // icon still matter: the taskbar and Alt-Tab show them.
             .with_decorations(false)
+            // Transparent so the corners we paint ourselves are actually
+            // corners rather than background-coloured triangles. Windows
+            // rounds the window through DWM instead and stays opaque.
+            .with_transparent(cfg!(target_os = "macos"))
             .with_title("Henry's Shadowing App")
             .with_icon(icon),
         ..Default::default()
