@@ -77,12 +77,13 @@ pub fn check_demucs() -> DependencyStatus {
 // Demucs, off the UI thread
 // ---------------------------------------------------------------------------
 
-const DEMUCS_UNKNOWN: u8 = 0;
-const DEMUCS_FOUND: u8 = 1;
-const DEMUCS_MISSING: u8 = 2;
+// Shared by both cached probes below.
+const PROBE_UNKNOWN: u8 = 0;
+const PROBE_FOUND: u8 = 1;
+const PROBE_MISSING: u8 = 2;
 
 /// Last known answer from [`check_demucs`], so the render loop never has to ask.
-static DEMUCS: AtomicU8 = AtomicU8::new(DEMUCS_UNKNOWN);
+static DEMUCS: AtomicU8 = AtomicU8::new(PROBE_UNKNOWN);
 /// Whether a probe is in flight, so repeated clicks don't pile up threads.
 static DEMUCS_PROBING: AtomicBool = AtomicBool::new(false);
 
@@ -92,8 +93,8 @@ static DEMUCS_PROBING: AtomicBool = AtomicBool::new(false);
 /// Cheap enough to call every frame - one atomic load.
 pub fn demucs_status() -> Option<DependencyStatus> {
     match DEMUCS.load(Ordering::Relaxed) {
-        DEMUCS_FOUND => Some(DependencyStatus::Found),
-        DEMUCS_MISSING => Some(DependencyStatus::NotFound),
+        PROBE_FOUND => Some(DependencyStatus::Found),
+        PROBE_MISSING => Some(DependencyStatus::NotFound),
         _ => None,
     }
 }
@@ -113,9 +114,9 @@ pub fn refresh_demucs() {
         let status = check_demucs();
         DEMUCS.store(
             if status.is_ok() {
-                DEMUCS_FOUND
+                PROBE_FOUND
             } else {
-                DEMUCS_MISSING
+                PROBE_MISSING
             },
             Ordering::Relaxed,
         );
@@ -128,6 +129,17 @@ pub fn refresh_demucs() {
 /// downloaded Faster-Whisper-XXL engine (preferred — no Python) or a system
 /// whisperx. Probed at startup and before each run.
 pub fn check_transcription() -> DependencyStatus {
+    // whisper.cpp first, because it is what actually runs: it ships inside the
+    // app with a model beside it, and transcribe_to_segments prefers it over
+    // everything below. Leaving it out of this check meant the app could
+    // transcribe perfectly while telling the user it had no engine - and,
+    // worse, offering them a download they did not need. It is also the
+    // cheapest answer here by far: two file checks, where everything after
+    // this spawns processes.
+    if crate::pipeline::whispercpp_ready() {
+        return DependencyStatus::Found;
+    }
+
     if crate::download::installed_exe(crate::download::ToolId::FasterWhisper).is_some() {
         return DependencyStatus::Found;
     }
@@ -140,6 +152,54 @@ pub fn check_transcription() -> DependencyStatus {
     }
 
     check_python_module("whisperx", "whisperx")
+}
+
+// ---------------------------------------------------------------------------
+// Transcription, off the UI thread
+// ---------------------------------------------------------------------------
+
+/// Last known answer from [`check_transcription`].
+static TRANSCRIPTION: AtomicU8 = AtomicU8::new(PROBE_UNKNOWN);
+static TRANSCRIPTION_PROBING: AtomicBool = AtomicBool::new(false);
+
+/// Whether we have a transcription engine, or `None` if we have not found out
+/// yet. One atomic load; safe to call every frame.
+pub fn transcription_status() -> Option<DependencyStatus> {
+    match TRANSCRIPTION.load(Ordering::Relaxed) {
+        PROBE_FOUND => Some(DependencyStatus::Found),
+        PROBE_MISSING => Some(DependencyStatus::NotFound),
+        _ => None,
+    }
+}
+
+/// Probe for a transcription engine on a helper thread.
+///
+/// Usually the answer is two file checks - whisper.cpp and its model both ship
+/// with the app - but when neither that nor the downloaded standalone engine is
+/// present it falls through to hunting for whisperx, which means running
+/// launchers and importing torch. That is the case this exists for: it used to
+/// happen inline, so ticking "English translation" or pressing Start all stalled
+/// the window for about a second, and longer on a machine that does not have it.
+///
+/// Called at launch, and again whenever something might have changed the answer:
+/// an engine or model finishing its download, or a run failing in a way that
+/// disqualifies whisperx.
+pub fn refresh_transcription() {
+    if TRANSCRIPTION_PROBING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    std::thread::spawn(|| {
+        let status = check_transcription();
+        TRANSCRIPTION.store(
+            if status.is_ok() {
+                PROBE_FOUND
+            } else {
+                PROBE_MISSING
+            },
+            Ordering::Relaxed,
+        );
+        TRANSCRIPTION_PROBING.store(false, Ordering::SeqCst);
+    });
 }
 
 fn check_python_module(module: &'static str, cli_name: &'static str) -> DependencyStatus {

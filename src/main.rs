@@ -899,6 +899,7 @@ impl App {
         // so there is nothing to undo here.
         if recheck {
             deps::refresh_demucs();
+            deps::refresh_transcription();
             self.strip_music = true;
             close = true;
         }
@@ -1181,6 +1182,13 @@ impl eframe::App for App {
         // are transparent on macOS so this is what actually shows.
         theme::paint_window_background(ctx);
 
+        // Mirror the background probe into the flag the windows read. Cheap
+        // (one atomic load) and it means every place that cares sees the same
+        // answer, whenever it happens to arrive.
+        if let Some(status) = deps::transcription_status() {
+            self.whisper_ok = status.is_ok();
+        }
+
         while let Ok(msg) = self.rx.try_recv() {
             match msg {
                 JobMsg::Stage(id, generation, stage, frac) => {
@@ -1239,10 +1247,8 @@ impl eframe::App for App {
                         // the user rather than leaving them to guess — without
                         // this, the cached `whisper_ok` means the window they
                         // need can never open again this session.
-                        if !whisper_installed() {
-                            self.whisper_ok = false;
-                            self.whisper_window_open = true;
-                        }
+                        self.whisper_ok = false;
+                        deps::refresh_transcription();
                     }
                 }
                 JobMsg::Cancelled(id, generation) => {
@@ -1331,8 +1337,11 @@ impl eframe::App for App {
                     }
                     // The engine just landed — refresh the cached flag so the
                     // window shows "installed" and Start all stops gating.
-                    if id == download::ToolId::FasterWhisper {
-                        self.whisper_ok = whisper_installed();
+                    if matches!(
+                        id,
+                        download::ToolId::FasterWhisper | download::ToolId::WhisperModel(_)
+                    ) {
+                        deps::refresh_transcription();
                     }
                 }
                 DownloadMsg::Cancelled(id) => {
@@ -1613,7 +1622,10 @@ impl eframe::App for App {
                     if translate.changed()
                         && self.translate_english
                         && !self.whisper_ok
-                        && !whisper_installed()
+                        && matches!(
+                            deps::transcription_status(),
+                            Some(deps::DependencyStatus::NotFound)
+                        )
                     {
                         self.whisper_window_open = true;
                     }
@@ -1867,11 +1879,19 @@ impl eframe::App for App {
                             // starting — a run without it only fails. Re-probe until it
                             // passes (so downloading the engine then pressing again
                             // works), then trust the cached flag for the session.
-                            if self.whisper_ok || whisper_installed() {
-                                self.whisper_ok = true;
-                                self.start_pending();
-                            } else {
+                            // Never probe here: this is the button people press,
+                            // and it used to run a subprocess hunt before doing
+                            // anything. The cached answer is refreshed at launch
+                            // and after anything that could change it. Unknown
+                            // means start anyway - the pipeline reports a missing
+                            // engine far better than a button that does nothing.
+                            if matches!(
+                                deps::transcription_status(),
+                                Some(deps::DependencyStatus::NotFound)
+                            ) {
                                 self.whisper_window_open = true;
+                            } else {
+                                self.start_pending();
                             }
                         }
 
@@ -2559,10 +2579,6 @@ fn default_output_dir() -> PathBuf {
 /// True if a transcription engine is available — the downloaded standalone or
 /// a system whisperx. Spawns subprocesses, so call it on events (startup,
 /// Start-all, download-done), never in the per-frame render loop.
-fn whisper_installed() -> bool {
-    deps::check_transcription().is_ok()
-}
-
 fn download_button(
     ui: &mut egui::Ui,
     id: download::ToolId,

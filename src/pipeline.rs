@@ -296,6 +296,17 @@ pub enum WhisperModel {
 }
 
 impl WhisperModel {
+    /// Every accuracy the picker offers, smallest first. One list, so a new
+    /// model cannot be added to the dropdown and quietly forgotten by the code
+    /// that asks what is installed.
+    pub const ALL: [WhisperModel; 5] = [
+        WhisperModel::Tiny,
+        WhisperModel::Base,
+        WhisperModel::Small,
+        WhisperModel::Medium,
+        WhisperModel::LargeV3,
+    ];
+
     pub fn label(&self) -> &'static str {
         match self {
             WhisperModel::Tiny => "Lowest Accuracy, Fastest",
@@ -1869,6 +1880,18 @@ pub fn whispercpp_available() -> bool {
 /// Whether `model` can be used right now without downloading anything.
 pub fn model_ready(model: WhisperModel) -> bool {
     whispercpp_model_path(model).is_some()
+}
+
+/// Whether whisper.cpp could transcribe something right now: the engine is
+/// here, and so is at least one model.
+///
+/// "At least one" rather than the selected one on purpose. This answers the
+/// dependency question — is there an engine at all — and the smallest model
+/// ships with the app, so on a normal install it is yes. Whether the model the
+/// user has *chosen* needs fetching is a different question, asked and answered
+/// by the download button beside the accuracy picker.
+pub fn whispercpp_ready() -> bool {
+    whispercpp_available() && WhisperModel::ALL.iter().any(|m| model_ready(*m))
 }
 
 /// Where the GGML file for `model` is, if we have it.
